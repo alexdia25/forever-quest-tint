@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.0
+- Lower memory and CPU use. The vanilla quest list is no longer expanded into a table of ~9,000 entries at load, the quest log and Dialogue UI overlays only redraw when something actually changed, and the tracker scan no longer creates temporary tables ten times a second. The quest log refresh stops running when no marked quest is open.
+
 ## 0.5.6
 - Dialogue UI: in the Brown theme, the divider above the buttons (shown when the text scrolls) is now tinted like the rest of the parchment instead of showing as an orange band.
 

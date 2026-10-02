@@ -44,11 +44,22 @@ local PANELS = {
 }
 local SUFFIXES = { "Bg", "MaterialTopLeft", "MaterialTopRight", "MaterialBotLeft", "MaterialBotRight" }
 
-local vanilla = {}
-for _, r in ipairs(ns.VanillaQuestRanges) do
-    for id = r[1], r[2] do
-        vanilla[id] = true
+-- Binary search over the sorted ranges: no per-ID table, so nothing to hold in memory.
+local RANGES = ns.VanillaQuestRanges
+local function IsVanilla(id)
+    local lo, hi = 1, #RANGES
+    while lo <= hi do
+        local mid = math.floor((lo + hi) / 2)
+        local r = RANGES[mid]
+        if id < r[1] then
+            hi = mid - 1
+        elseif id > r[2] then
+            lo = mid + 1
+        else
+            return true
+        end
     end
+    return false
 end
 
 local REWARDS_OVERLAP = 24 -- how far the overlay tucks under the Rewards panel
@@ -135,6 +146,7 @@ local function ApplyLogo(tex, show)
 end
 
 local overlays = setmetatable({}, { __mode = "k" })
+ns.rev = 0 -- bumped by ns.Reapply; invalidates the cached overlay geometry
 
 local function ApplyOverlay(tex, tinted, noLogo)
     local ov = overlays[tex]
@@ -148,16 +160,6 @@ local function ApplyOverlay(tex, tinted, noLogo)
         ov = tex:GetParent():CreateTexture(nil, "BACKGROUND", nil, 2)
         overlays[tex] = ov
     end
-    -- Bottom strip of the parchment only, so the fade finishes cfg.height of the way up.
-    local l, r, t, b
-    local atlas = tex:GetAtlas()
-    local info = atlas and C_Texture.GetAtlasInfo(atlas)
-    if info then
-        l, r, t, b = info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord
-    else
-        local ulx, uly, _, _, _, _, lrx, lry = tex:GetTexCoord()
-        l, r, t, b = ulx, lrx, uly, lry
-    end
     -- The Rewards panel (log window) slides over the bottom of the parchment, so measure
     -- from the bottom of the *visible* parchment and map the texture coords to match.
     local bgTop, bgBottom = tex:GetTop(), tex:GetBottom()
@@ -168,6 +170,24 @@ local function ApplyOverlay(tex, tinted, noLogo)
     local visBottom = bgBottom
     local rewards = tex:GetParent().RewardsFrameContainer
     local rewardsTop = rewards and rewards:IsShown() and rewards:GetTop()
+    -- Called up to 20 times a second by the keeper: if nothing it depends on has changed, stop here.
+    local atlas = tex:GetAtlas()
+    local dark = IsDarkBackground()
+    if ov:IsShown() and ov.fqtRev == ns.rev and ov.fqtTop == bgTop and ov.fqtBottom == bgBottom
+        and ov.fqtRewards == (rewardsTop or false) and ov.fqtAtlas == atlas and ov.fqtDark == dark then
+        return
+    end
+    ov.fqtRev, ov.fqtTop, ov.fqtBottom = ns.rev, bgTop, bgBottom
+    ov.fqtRewards, ov.fqtAtlas, ov.fqtDark = rewardsTop or false, atlas, dark
+    -- Bottom strip of the parchment only, so the fade finishes cfg.height of the way up.
+    local l, r, t, b
+    local info = atlas and C_Texture.GetAtlasInfo(atlas)
+    if info then
+        l, r, t, b = info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord
+    else
+        local ulx, uly, _, _, _, _, lrx, lry = tex:GetTexCoord()
+        l, r, t, b = ulx, lrx, uly, lry
+    end
     if rewardsTop then
         -- Run underneath the Rewards panel: its rim starts below its reported top edge.
         rewardsTop = rewardsTop - REWARDS_OVERLAP
@@ -185,7 +205,7 @@ local function ApplyOverlay(tex, tinted, noLogo)
     ov:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, visBottom - bgBottom)
     ov:SetHeight(height)
     local c = cfg.tint
-    if IsDarkBackground() then
+    if dark then
         -- On the Black contrast setting a multiplied copy of the background would stay black,
         -- so draw a flat, deeper teal glow instead.
         ov:SetColorTexture(1, 1, 1, 1)
@@ -258,7 +278,7 @@ end
 
 local function Update()
     local id = GetQuestID()
-    currentTint = id and id > 0 and not vanilla[id] or false
+    currentTint = id and id > 0 and not IsVanilla(id) or false
     Refresh()
     -- Blizzard may re-apply quest materials after the event fires.
     C_Timer.After(0, Refresh)
@@ -287,6 +307,7 @@ local logBg, logTinted
 local function TintLogFrame(tinted)
     if not QuestMapFrame then return end
     logTinted = tinted
+    if tinted then keeper:Show() end
     -- Blizzard's own key for the parchment; works whatever atlas the contrast setting uses.
     local details = QuestMapFrame.DetailsFrame
     local bg = details and details.Bg
@@ -307,21 +328,23 @@ end
 -- keep it applied while a tinted quest is showing.
 local elapsed = 0
 local keeper = CreateFrame("Frame")
-keeper:SetScript("OnUpdate", function(_, dt)
+keeper:Hide() -- an OnUpdate only runs while its frame is shown; TintLogFrame shows it when needed
+keeper:SetScript("OnUpdate", function(self, dt)
     elapsed = elapsed + dt
     if elapsed < 0.05 then return end
     elapsed = 0
     if logTinted and logBg and logBg:IsVisible() then
         ApplyOverlay(logBg, true)
-    elseif logBg then
-        ApplyLogo(logBg, false)
+    else
+        if logBg then ApplyLogo(logBg, false) end
+        self:Hide()
     end
 end)
 
 local function RefreshLog()
     local details = QuestMapFrame and QuestMapFrame.DetailsFrame
     local id = details and details:IsShown() and details.questID
-    TintLogFrame(id and id > 0 and not vanilla[id] or false)
+    TintLogFrame(id and id > 0 and not IsVanilla(id) or false)
 end
 
 local logHooked = false
@@ -347,7 +370,7 @@ end
 -- Marker (default: an infinity sign) in front of non-vanilla quest names in the quest log
 -- list and the objective tracker.
 local function IsNonVanilla(questID)
-    return questID and questID > 0 and not vanilla[questID]
+    return questID and questID > 0 and not IsVanilla(questID)
 end
 
 -- Dialogue UI (addon) replaces the quest window with DUIQuestFrame, which draws its own parchment
@@ -359,6 +382,7 @@ local DUI_DARK_SCALE = 0.7 -- Dark theme glow: brightness of the teal...
 local DUI_DARK_ALPHA = 0.45 -- ...and its strength relative to cfg.alpha (lower = subtler)
 local DARK_GLOW_PATH = "Interface/AddOns/ForeverQuestTint/Media/DarkParchmentGlow.png"
 local duiOverlays = {}
+local duiKey = {} -- geometry the DUI overlay was last drawn for
 local duiLogo
 
 -- The footer divider (shown above the buttons when the text scrolls) is a parchment-coloured fade
@@ -382,6 +406,7 @@ local function ResetDUIDivider()
 end
 
 local function HideDUI()
+    duiKey.rev = nil
     ResetDUIDivider()
     for _, ov in ipairs(duiOverlays) do ov:Hide() end
     if duiLogo then duiLogo:Hide() end
@@ -399,11 +424,18 @@ end
 local function ApplyDUIOverlay(frame, pieces)
     local bottom, top = pieces[3]:GetBottom(), pieces[1]:GetTop()
     if not bottom or not top or top <= bottom then
+        duiKey.rev = nil
         for _, ov in ipairs(duiOverlays) do ov:Hide() end
         ResetDUIDivider()
         return
     end
     local cfg = ns.cfg
+    local midHeight = pieces[2]:GetHeight()
+    if duiKey.rev == ns.rev and duiKey.id == frame.questID and duiKey.top == top
+        and duiKey.bottom == bottom and duiKey.mid == midHeight then
+        return
+    end
+    duiKey.rev, duiKey.id, duiKey.top, duiKey.bottom, duiKey.mid = ns.rev, frame.questID, top, bottom, midHeight
     local c = VividTint(cfg.tint)
     local file = pieces[1]:GetTexture()
     -- Dialogue UI's own setting (Theme: 1 = Brown, 2 = Dark); GetTexture may return a file ID, so
@@ -487,6 +519,7 @@ local function RefreshDUI()
     if ns.cfg.showTint then
         ApplyDUIOverlay(frame, frame.Parchments)
     else
+        duiKey.rev = nil
         ResetDUIDivider()
         for _, ov in ipairs(duiOverlays) do ov:Hide() end
     end
@@ -701,46 +734,70 @@ end
 
 -- The objective tracker differs between clients, so as well as hooking the older WatchFrame
 -- function, look through the tracker's text lines a few times a second and mark quest names.
-local function ColourBlockObjectives(block, headerFs, on)
-    for _, region in ipairs({ block:GetRegions() }) do
+-- The scan runs ten times a second, so it walks regions and children with select() over the
+-- varargs instead of packing them into a new table per frame, and tracks visited frames in a
+-- reusable table rather than a fresh one per scan.
+local ColourBlockObjectives
+
+local function ColourRegions(headerFs, on, ...)
+    for i = 1, select("#", ...) do
+        local region = select(i, ...)
         if region ~= headerFs and region.GetObjectType and region:GetObjectType() == "FontString" then
             SetObjectiveColour(region, on)
         end
     end
-    for _, child in ipairs({ block:GetChildren() }) do
-        ColourBlockObjectives(child, headerFs, on)
+end
+
+local function ColourChildren(headerFs, on, ...)
+    for i = 1, select("#", ...) do
+        ColourBlockObjectives((select(i, ...)), headerFs, on)
     end
 end
 
-local function ScanTracker(frame, seen)
-    if seen[frame] then return end
-    seen[frame] = true
-    for _, region in ipairs({ frame:GetRegions() }) do
-        if region.GetObjectType and region:GetObjectType() == "FontString" then
-            local text = region:GetText()
-            if text and text ~= "" then
-                local base = (region.fqtMarked and text == region.fqtMarked) and region.fqtBase or text
-                local wanted = titleMap[base] or titleMap[StripPrefixes(base)]
-                if wanted or region.fqtMarked then
-                    ApplyMarker(region, wanted, true)
-                end
-                local colourOn = wanted and ns.cfg.objectiveTint
-                if colourOn or region.fqtColouredBlock then
-                    local block = region.GetParent and region:GetParent()
-                    if colourOn and block then
-                        ColourBlockObjectives(block, region, true)
-                        region.fqtColouredBlock = block
-                    elseif region.fqtColouredBlock then
-                        ColourBlockObjectives(region.fqtColouredBlock, region, false)
-                        region.fqtColouredBlock = nil
-                    end
-                end
-            end
+function ColourBlockObjectives(block, headerFs, on)
+    ColourRegions(headerFs, on, block:GetRegions())
+    ColourChildren(headerFs, on, block:GetChildren())
+end
+
+local scanGen = 0
+local scanSeen = setmetatable({}, { __mode = "k" })
+local ScanTracker
+
+local function ScanRegion(region)
+    if not (region.GetObjectType and region:GetObjectType() == "FontString") then return end
+    local text = region:GetText()
+    if not text or text == "" then return end
+    local base = (region.fqtMarked and text == region.fqtMarked) and region.fqtBase or text
+    local wanted = titleMap[base] or titleMap[StripPrefixes(base)]
+    if wanted or region.fqtMarked then
+        ApplyMarker(region, wanted, true)
+    end
+    local colourOn = wanted and ns.cfg.objectiveTint
+    if colourOn or region.fqtColouredBlock then
+        local block = region.GetParent and region:GetParent()
+        if colourOn and block then
+            ColourBlockObjectives(block, region, true)
+            region.fqtColouredBlock = block
+        elseif region.fqtColouredBlock then
+            ColourBlockObjectives(region.fqtColouredBlock, region, false)
+            region.fqtColouredBlock = nil
         end
     end
-    for _, child in ipairs({ frame:GetChildren() }) do
-        ScanTracker(child, seen)
-    end
+end
+
+local function ScanRegions(...)
+    for i = 1, select("#", ...) do ScanRegion((select(i, ...))) end
+end
+
+local function ScanChildren(...)
+    for i = 1, select("#", ...) do ScanTracker((select(i, ...))) end
+end
+
+function ScanTracker(frame)
+    if scanSeen[frame] == scanGen then return end
+    scanSeen[frame] = scanGen
+    ScanRegions(frame:GetRegions())
+    ScanChildren(frame:GetChildren())
 end
 
 local scanElapsed = 0
@@ -749,7 +806,8 @@ local function ScanOnce()
     local root = ObjectiveTrackerFrame or WatchFrame
     if not root or not root:IsVisible() then return end
     if not titleMap then BuildTitleMap() end
-    ScanTracker(root, {})
+    scanGen = scanGen + 1
+    ScanTracker(root)
 end
 
 local function ScanOnceWrapper()
@@ -830,6 +888,7 @@ HookMarkers()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
+    ns.rev = ns.rev + 1
     Refresh()
     RefreshDUI()
     RefreshLog()
@@ -864,7 +923,7 @@ SlashCmdList.FQT = function(msg)
         local bg = QuestMapFrame and QuestMapFrame.DetailsFrame and QuestMapFrame.DetailsFrame.Bg
         print("Forever Quest Tint: log parchment atlas = " .. tostring(bg and bg:GetAtlas()) .. ", file = " .. tostring(bg and bg:GetTexture()))
         print(("Forever Quest Tint: dialog quest id %s (vanilla=%s), log quest id %s (vanilla=%s)"):format(
-            tostring(id), tostring(id and vanilla[id] or false), tostring(logID), tostring(logID and vanilla[logID] or false)))
+            tostring(id), tostring(id and IsVanilla(id) or false), tostring(logID), tostring(logID and IsVanilla(logID) or false)))
         return
     end
     if ns.OpenOptions then ns.OpenOptions() end
