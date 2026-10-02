@@ -5,7 +5,7 @@ local ADDON, ns = ...
 ns.defaults = {
     showTint = true,   -- teal overlay on non-vanilla quests
     showLogo = false,  -- WoW Forever logo above the quest text on non-vanilla quests
-    tint = { 0.60, 0.90, 0.95 },
+    tint = { 0.30, 0.95, 1.00 },
     alpha = 1.0,    -- opacity at the very bottom
     topAlpha = 0,   -- opacity where the fade ends
     height = 0.6,   -- fraction of the visible parchment (from the bottom) the fade covers
@@ -350,6 +350,119 @@ local function IsNonVanilla(questID)
     return questID and questID > 0 and not vanilla[questID]
 end
 
+-- Dialogue UI (addon) replaces the quest window with DUIQuestFrame, which draws its own parchment
+-- as three stacked pieces (top cap, stretched middle, bottom cap) in frame.Parchments. Its theme
+-- is a texture folder (Theme_Brown / Theme_Dark). frame.questID is only set while a quest is open.
+local DUI_LOGO_SIZE = 30
+local DUI_LOGO_X, DUI_LOGO_Y = 6, -4 -- from the top-right corner of the quest title header
+local DUI_DARK_SCALE = 0.7 -- Dark theme glow: brightness of the teal...
+local DUI_DARK_ALPHA = 0.45 -- ...and its strength relative to cfg.alpha (lower = subtler)
+local DARK_GLOW_PATH = "Interface/AddOns/ForeverQuestTint/Media/DarkParchmentGlow.png"
+local duiOverlays = {}
+local duiLogo
+
+local function HideDUI()
+    for _, ov in ipairs(duiOverlays) do ov:Hide() end
+    if duiLogo then duiLogo:Hide() end
+end
+
+local function ApplyDUIOverlay(frame, pieces)
+    local bottom, top = pieces[3]:GetBottom(), pieces[1]:GetTop()
+    if not bottom or not top or top <= bottom then
+        for _, ov in ipairs(duiOverlays) do ov:Hide() end
+        return
+    end
+    local cfg = ns.cfg
+    local c = cfg.tint
+    local file = pieces[1]:GetTexture()
+    -- Dialogue UI's own setting (Theme: 1 = Brown, 2 = Dark); GetTexture may return a file ID, so
+    -- the texture path is only a fallback.
+    local dark = (DialogueUI_DB and DialogueUI_DB.Theme == 2)
+        or (type(file) == "string" and file:lower():find("theme_dark", 1, true) ~= nil)
+    -- A tinted copy of the near-black Dark parchment would stay black, so use a white copy of its
+    -- outline instead (same layout, so the same texture coordinates apply) and tint that.
+    if dark then file = DARK_GLOW_PATH end
+    local fade = (top - bottom) * cfg.height
+    -- Opacity of the teal at height y: cfg.alpha at the very bottom, cfg.topAlpha where the fade ends.
+    local function alphaAt(y)
+        local a = cfg.topAlpha + (cfg.alpha - cfg.topAlpha) * (1 - (y - bottom) / fade)
+        return dark and a * DUI_DARK_ALPHA or a
+    end
+    local scale = dark and DUI_DARK_SCALE or 1
+    for i, piece in ipairs(pieces) do
+        local ov = duiOverlays[i]
+        if not ov then
+            ov = frame.BackgroundFrame:CreateTexture(nil, "BACKGROUND", nil, 2)
+            duiOverlays[i] = ov
+        end
+        local pb, pt = piece:GetBottom(), piece:GetTop()
+        local lo, hi = pb and math.max(pb, bottom), pt and math.min(pt, bottom + fade)
+        if not lo or not hi or hi - lo < 0.01 or pt <= pb then
+            ov:Hide()
+        else
+            -- Each piece only overlays the part of itself inside the fade, with the matching
+            -- slice of its texture (the middle piece is stretched, so this stays proportional).
+            local ulx, uly, _, _, _, _, lrx, lry = piece:GetTexCoord()
+            local function v(y) return uly + (lry - uly) * ((pt - y) / (pt - pb)) end
+            ov:ClearAllPoints()
+            ov:SetPoint("BOTTOMLEFT", piece, "BOTTOMLEFT", 0, lo - pb)
+            ov:SetPoint("BOTTOMRIGHT", piece, "BOTTOMRIGHT", 0, lo - pb)
+            ov:SetHeight(hi - lo)
+            local lowColor = CreateColor(c[1] * scale, c[2] * scale, c[3] * scale, alphaAt(lo))
+            local highColor = CreateColor(c[1] * scale, c[2] * scale, c[3] * scale, alphaAt(hi))
+            ov:SetDesaturated(not dark)
+            ov:SetTexture(file)
+            ov:SetTexCoord(ulx, lrx, v(hi), v(lo))
+            ov:SetGradient("VERTICAL", lowColor, highColor)
+            ov:Show()
+        end
+    end
+end
+
+local function ApplyDUILogo(frame, show)
+    local header = frame.FrontFrame and frame.FrontFrame.Header
+    if not show or not header then
+        if duiLogo then duiLogo:Hide() end
+        return
+    end
+    if not duiLogo then
+        duiLogo = CreateFrame("Frame", nil, frame)
+        duiLogo:SetFrameStrata(frame:GetFrameStrata())
+        duiLogo:SetFrameLevel(math.min(frame:GetFrameLevel() + 50, 9999))
+        duiLogo:SetSize(DUI_LOGO_SIZE, DUI_LOGO_SIZE)
+        duiLogo.texture = duiLogo:CreateTexture(nil, "OVERLAY")
+        duiLogo.texture:SetAllPoints()
+        duiLogo.texture:SetTexture(LOGO_PATH)
+        duiLogo:SetPoint("BOTTOMRIGHT", header, "TOPRIGHT", DUI_LOGO_X, DUI_LOGO_Y)
+    end
+    duiLogo:Show()
+end
+
+local function RefreshDUI()
+    local frame = _G.DUIQuestFrame
+    if not frame or not frame.Parchments then return end
+    local id = frame.questLayout and frame.questID
+    if not frame:IsVisible() or not IsNonVanilla(id) then
+        if #duiOverlays > 0 or duiLogo then HideDUI() end
+        return
+    end
+    if ns.cfg.showTint then
+        ApplyDUIOverlay(frame, frame.Parchments)
+    else
+        for _, ov in ipairs(duiOverlays) do ov:Hide() end
+    end
+    ApplyDUILogo(frame, ns.cfg.showLogo)
+end
+
+-- Dialogue UI resizes its window to fit the text, so keep the overlay matched to it.
+local duiElapsed = 0
+CreateFrame("Frame"):SetScript("OnUpdate", function(_, dt)
+    duiElapsed = duiElapsed + dt
+    if duiElapsed < 0.05 then return end
+    duiElapsed = 0
+    RefreshDUI()
+end)
+
 local ICON_PATH = "Interface\\AddOns\\ForeverQuestTint\\Media\\Infinity.tga"
 -- The visible infinity sign inside Infinity.tga (a 64x64 image), in pixels.
 local ICON_L, ICON_R, ICON_T, ICON_B = 1, 63, 12, 51
@@ -660,6 +773,12 @@ loader:SetScript("OnEvent", function(_, event, name)
             db.markerOffset = db.markerOffset - ICON_BASELINE
         end
         db.markerOffsetRelative = true
+        -- 0.6 made the default tint more vivid: move anyone still on the old default colour.
+        local t = db.tint
+        if not db.vividTint and t and math.abs(t[1] - 0.60) < 0.01 and math.abs(t[2] - 0.90) < 0.01 and math.abs(t[3] - 0.95) < 0.01 then
+            db.tint = { 0.30, 0.95, 1.00 }
+        end
+        db.vividTint = true
         ForeverQuestTintDB = CopyDefaults(db, ns.defaults)
         ns.cfg = ForeverQuestTintDB
     end
@@ -673,6 +792,7 @@ HookMarkers()
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
     Refresh()
+    RefreshDUI()
     RefreshLog()
     RefreshLogList()
     RefreshTracker()
