@@ -5,7 +5,7 @@ local ADDON, ns = ...
 ns.defaults = {
     showTint = true,   -- teal overlay on non-vanilla quests
     showLogo = false,  -- WoW Forever logo above the quest text on non-vanilla quests
-    tint = { 0.30, 0.95, 1.00 },
+    tint = { 0.60, 0.90, 0.95 },
     alpha = 1.0,    -- opacity at the very bottom
     topAlpha = 0,   -- opacity where the fade ends
     height = 0.6,   -- fraction of the visible parchment (from the bottom) the fade covers
@@ -366,6 +366,15 @@ local function HideDUI()
     if duiLogo then duiLogo:Hide() end
 end
 
+-- Dialogue UI's parchment is paler than Blizzard's, so push the tint away from grey (and clamp):
+-- the default 0.60/0.90/0.95 becomes about 0.38/0.98/1.00.
+local DUI_VIVID = 2
+local function VividTint(c)
+    local avg = (c[1] + c[2] + c[3]) / 3
+    local function f(x) return math.max(0, math.min(1, avg + (x - avg) * DUI_VIVID)) end
+    return { f(c[1]), f(c[2]), f(c[3]) }
+end
+
 local function ApplyDUIOverlay(frame, pieces)
     local bottom, top = pieces[3]:GetBottom(), pieces[1]:GetTop()
     if not bottom or not top or top <= bottom then
@@ -373,7 +382,7 @@ local function ApplyDUIOverlay(frame, pieces)
         return
     end
     local cfg = ns.cfg
-    local c = cfg.tint
+    local c = VividTint(cfg.tint)
     local file = pieces[1]:GetTexture()
     -- Dialogue UI's own setting (Theme: 1 = Brown, 2 = Dark); GetTexture may return a file ID, so
     -- the texture path is only a fallback.
@@ -773,12 +782,12 @@ loader:SetScript("OnEvent", function(_, event, name)
             db.markerOffset = db.markerOffset - ICON_BASELINE
         end
         db.markerOffsetRelative = true
-        -- 0.6 made the default tint more vivid: move anyone still on the old default colour.
+        -- 0.5.5 briefly changed the default tint for everyone; put anyone still on that colour back.
         local t = db.tint
-        if not db.vividTint and t and math.abs(t[1] - 0.60) < 0.01 and math.abs(t[2] - 0.90) < 0.01 and math.abs(t[3] - 0.95) < 0.01 then
-            db.tint = { 0.30, 0.95, 1.00 }
+        if db.vividTint and t and math.abs(t[1] - 0.30) < 0.01 and math.abs(t[2] - 0.95) < 0.01 and math.abs(t[3] - 1.00) < 0.01 then
+            db.tint = { 0.60, 0.90, 0.95 }
         end
-        db.vividTint = true
+        db.vividTint = nil
         ForeverQuestTintDB = CopyDefaults(db, ns.defaults)
         ns.cfg = ForeverQuestTintDB
     end
