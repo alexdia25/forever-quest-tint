@@ -361,7 +361,28 @@ local DARK_GLOW_PATH = "Interface/AddOns/ForeverQuestTint/Media/DarkParchmentGlo
 local duiOverlays = {}
 local duiLogo
 
+-- The footer divider (shown above the buttons when the text scrolls) is a parchment-coloured fade
+-- plus a line, drawn in the front layer above both the scrolling text and our overlay, so against
+-- the teal it shows up as an orange band. While the tint is on, it is moved into the background
+-- layer, between the parchment and our overlay, so it is tinted exactly like the paper around it
+-- (and the text still draws above it). This puts it back.
+local function DUIDivider(frame)
+    frame = frame or _G.DUIQuestFrame
+    return frame and frame.FrontFrame and frame.FrontFrame.FooterDivider
+end
+
+local function ResetDUIDivider()
+    local frame = _G.DUIQuestFrame
+    local div = DUIDivider(frame)
+    if div and div.fqtMoved then
+        div.fqtMoved = nil
+        div:SetParent(frame.FrontFrame)
+        div:SetDrawLayer("ARTWORK", 0)
+    end
+end
+
 local function HideDUI()
+    ResetDUIDivider()
     for _, ov in ipairs(duiOverlays) do ov:Hide() end
     if duiLogo then duiLogo:Hide() end
 end
@@ -379,6 +400,7 @@ local function ApplyDUIOverlay(frame, pieces)
     local bottom, top = pieces[3]:GetBottom(), pieces[1]:GetTop()
     if not bottom or not top or top <= bottom then
         for _, ov in ipairs(duiOverlays) do ov:Hide() end
+        ResetDUIDivider()
         return
     end
     local cfg = ns.cfg
@@ -391,6 +413,7 @@ local function ApplyDUIOverlay(frame, pieces)
     -- A tinted copy of the near-black Dark parchment would stay black, so use a white copy of its
     -- outline instead (same layout, so the same texture coordinates apply) and tint that.
     if dark then file = DARK_GLOW_PATH end
+    if dark then ResetDUIDivider() end
     local fade = (top - bottom) * cfg.height
     -- Opacity of the teal at height y: cfg.alpha at the very bottom, cfg.topAlpha where the fade ends.
     local function alphaAt(y)
@@ -426,6 +449,12 @@ local function ApplyDUIOverlay(frame, pieces)
             ov:Show()
         end
     end
+    local div = DUIDivider(frame)
+    if div and not dark and not div.fqtMoved then
+        div.fqtMoved = true
+        div:SetParent(frame.BackgroundFrame)
+        div:SetDrawLayer("BACKGROUND", 1) -- above the parchment pieces (-1), below our overlay (2)
+    end
 end
 
 local function ApplyDUILogo(frame, show)
@@ -458,6 +487,7 @@ local function RefreshDUI()
     if ns.cfg.showTint then
         ApplyDUIOverlay(frame, frame.Parchments)
     else
+        ResetDUIDivider()
         for _, ov in ipairs(duiOverlays) do ov:Hide() end
     end
     ApplyDUILogo(frame, ns.cfg.showLogo)
