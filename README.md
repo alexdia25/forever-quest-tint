@@ -41,6 +41,7 @@ Only quests that are open in a quest window are tinted. Gossip windows have no q
 
 ## Notes
 
+- Compatible with Dialogue UI: its quest window gets the tint and logo too. Nothing to configure. The marker and tracker features are unaffected. Dialogue UI doesn't load on the Forever client out of the box: in its `DialogueUI.toc`, delete the `## X-Expansion: MAINLINE` line and add `, 16001` to the `## Interface:` line.
 - Built for the Forever beta (interface `16001`). It relies on Blizzard's quest log art, so it may need updates if that changes.
 
 ## Licence
