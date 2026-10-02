@@ -2,7 +2,7 @@
 
 ## 0.5.5
 - Works with the Dialogue UI addon: its quest window gets the same teal fade (matching its Brown and Dark themes) and the optional logo, above the quest title. The Dark theme gets a teal glow that follows the parchment's torn edges.
-- More vivid default tint colour (existing installs still on the old default are moved to it).
+- The Dialogue UI window uses a more vivid version of your tint colour. The tint colour setting itself is unchanged.
 
 ## 0.5.0
 - New quest name marker: quests that were not in original Classic get an infinity sign after their name in the Map & Quest Log list and in the objective tracker. It is a small icon in the tint colour by default.
