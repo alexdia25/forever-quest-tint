@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.6
+- Dialogue UI: in the Brown theme, the divider above the buttons (shown when the text scrolls) is now tinted like the rest of the parchment instead of showing as an orange band.
+
 ## 0.5.5
 - Works with the Dialogue UI addon: its quest window gets the same teal fade (matching its Brown and Dark themes) and the optional logo, above the quest title. The Dark theme gets a teal glow that follows the parchment's torn edges.
 - The Dialogue UI window uses a more vivid version of your tint colour. The tint colour setting itself is unchanged.
