@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.1
+- Fixed a Lua error ("attempt to index global 'keeper'") in 0.6.0 that stopped the quest tint from showing in the quest log.
+
 ## 0.6.0
 - Lower memory and CPU use. The vanilla quest list is no longer expanded into a table of ~9,000 entries at load, the quest log and Dialogue UI overlays only redraw when something actually changed, and the tracker scan no longer creates temporary tables ten times a second. The quest log refresh stops running when no marked quest is open.
 
