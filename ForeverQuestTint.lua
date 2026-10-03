@@ -304,6 +304,7 @@ end
 
 -- Map & Quest Log: the parchment is QuestMapFrame...DetailsFrame.Bg (atlas QuestDetailsBackgrounds).
 local logBg, logTinted
+local keeper -- created below; TintLogFrame needs it as an upvalue
 local function TintLogFrame(tinted)
     if not QuestMapFrame then return end
     logTinted = tinted
@@ -327,7 +328,7 @@ end
 -- Blizzard re-lays out the details panel when it scrolls, which drops the overlay;
 -- keep it applied while a tinted quest is showing.
 local elapsed = 0
-local keeper = CreateFrame("Frame")
+keeper = CreateFrame("Frame")
 keeper:Hide() -- an OnUpdate only runs while its frame is shown; TintLogFrame shows it when needed
 keeper:SetScript("OnUpdate", function(self, dt)
     elapsed = elapsed + dt
