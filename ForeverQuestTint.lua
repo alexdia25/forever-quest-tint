@@ -208,6 +208,7 @@ local function ApplyOverlay(tex, tinted, noLogo)
     if dark then
         -- On the Black contrast setting a multiplied copy of the background would stay black,
         -- so draw a flat, deeper teal glow instead.
+        ov:SetDesaturated(false)
         ov:SetColorTexture(1, 1, 1, 1)
         ov:SetGradient("VERTICAL",
             CreateColor(c[1] * DARK_SCALE, c[2] * DARK_SCALE, c[3] * DARK_SCALE, cfg.alpha * DARK_ALPHA),
@@ -243,6 +244,8 @@ local function Walk(frame, fn, seen)
     end
 end
 
+local dialogTex = setmetatable({}, { __mode = "k" }) -- every quest-window texture we have overlaid
+
 local function SetTinted(tinted)
     -- The window has several parchment-like textures (one per panel); overlay all of them,
     -- but show the logo only once, on the largest visible one.
@@ -263,8 +266,16 @@ local function SetTinted(tinted)
         local area = tex:IsVisible() and (tex:GetWidth() * tex:GetHeight()) or 0
         if area > bestArea then best, bestArea = tex, area end
     end
+    local current = {}
     for _, tex in ipairs(candidates) do
+        current[tex] = true
+        dialogTex[tex] = true
         ApplyOverlay(tex, tinted, tex ~= best)
+    end
+    -- A texture Blizzard stopped reporting as parchment (new quest, new atlas) must not keep
+    -- an overlay from the previous quest on screen.
+    for tex in pairs(dialogTex) do
+        if not current[tex] then ApplyOverlay(tex, false) end
     end
 end
 
@@ -277,6 +288,7 @@ local function Refresh()
 end
 
 local function Update()
+    ns.rev = ns.rev + 1 -- a new quest was opened: redraw rather than trust cached geometry
     local id = GetQuestID()
     currentTint = id and id > 0 and not IsVanilla(id) or false
     Refresh()
@@ -291,6 +303,7 @@ f:RegisterEvent("QUEST_COMPLETE")
 f:RegisterEvent("QUEST_GREETING")
 f:SetScript("OnEvent", function(_, event)
     if event == "QUEST_GREETING" then
+        ns.rev = ns.rev + 1
         currentTint = false
         Refresh()
     else
@@ -562,6 +575,8 @@ local function MarkerGlyph()
     return ("|cff%02x%02x%02x%s|r"):format(r, g, b, cfg.markerSymbol)
 end
 
+local titleMap, BuildTitleMap, StripPrefixes -- defined further down; the SetText hook needs them
+
 -- Sets fs's text to the marked (or original) version. Remembers the original so this can be
 -- re-run safely, including after Blizzard rewrites the text. With padBlock, an entry whose
 -- marker adds a wrapped line also gets its block made taller by that line, because the tracker
@@ -595,6 +610,25 @@ local function ApplyMarker(fs, wanted, padBlock)
         end
     end
     fs.fqtMarked = new
+
+    -- Blizzard rewrites tracker headers on every re-layout (moving an item, tracking a recipe);
+    -- the poll would only restore the marker up to 0.1s later, which shows as a blink. Re-mark
+    -- the moment the text is set instead.
+    if padBlock and not fs.fqtHooked and fs.SetText then
+        fs.fqtHooked = true
+        hooksecurefunc(fs, "SetText", function(self)
+            if self.fqtRemarking then return end
+            local text = self:GetText()
+            if not text or text == "" or text == self.fqtMarked then return end
+            if not titleMap then BuildTitleMap() end
+            local wanted = titleMap[text] or titleMap[StripPrefixes(text)]
+            if wanted then
+                self.fqtRemarking = true
+                ApplyMarker(self, wanted, true)
+                self.fqtRemarking = nil
+            end
+        end)
+    end
 
     if padBlock then
         local block = fs.GetParent and fs:GetParent()
@@ -700,8 +734,7 @@ local function LogEntry(i)
     end
 end
 
-local titleMap
-local function BuildTitleMap()
+function BuildTitleMap()
     titleMap = {}
     for i = 1, NumLogEntries() do
         local title, isHeader, questID = LogEntry(i)
@@ -717,7 +750,7 @@ local function BuildTitleMap()
 end
 
 -- Tracker headers can carry a quest ID ("123 - Title") and/or a level ("[8] Title").
-local function StripPrefixes(text)
+function StripPrefixes(text)
     -- The tracker wraps names in colour codes ("|cffffd100[6] Title|r") and may add icons.
     text = text:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", ""):gsub("|A.-|a", "")
     text = text:gsub("^%s+", "")

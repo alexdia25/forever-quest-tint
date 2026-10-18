@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2
+- Fixed the teal fade breaking in the quest-giver window (a flat band with a hard edge, or tint on quests that shouldn't have it) after picking up or abandoning a quest. It no longer needed a /reload to recover.
+- Fixed the quest marker blinking in the objective tracker whenever the tracker redrew (moving inventory items, tracking a recipe).
+
 ## 0.6.1
 - Fixed a Lua error ("attempt to index global 'keeper'") in 0.6.0 that stopped the quest tint from showing in the quest log.
 
