@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.3
+- Fixed idle CPU use while the objective tracker is visible. The tracker is now rescanned only when it or the quest log changes, instead of ten times a second, and the Dialogue UI size watcher only runs while the Dialogue UI quest window is open. Thanks to the reporter of issue #2.
+
 ## 0.6.2
 - Fixed the teal fade breaking in the quest-giver window (a flat band with a hard edge, or tint on quests that shouldn't have it) after picking up or abandoning a quest. It no longer needed a /reload to recover.
 - Fixed the quest marker blinking in the objective tracker whenever the tracker redrew (moving inventory items, tracking a recipe).

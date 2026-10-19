@@ -540,14 +540,26 @@ local function RefreshDUI()
     ApplyDUILogo(frame, ns.cfg.showLogo)
 end
 
--- Dialogue UI resizes its window to fit the text, so keep the overlay matched to it.
+-- Dialogue UI resizes its window to fit the text, so keep the overlay matched to it. The watcher
+-- is parented to the quest frame so it only runs while that frame is visible (and not at all
+-- when Dialogue UI isn't installed); show/hide/resize hooks refresh and clean up.
 local duiElapsed = 0
-CreateFrame("Frame"):SetScript("OnUpdate", function(_, dt)
-    duiElapsed = duiElapsed + dt
-    if duiElapsed < 0.05 then return end
-    duiElapsed = 0
+local duiWatcher
+local function HookDUI()
+    local frame = _G.DUIQuestFrame
+    if duiWatcher or not frame or not frame.HookScript then return end
+    duiWatcher = CreateFrame("Frame", nil, frame)
+    duiWatcher:SetScript("OnUpdate", function(_, dt)
+        duiElapsed = duiElapsed + dt
+        if duiElapsed < 0.05 then return end
+        duiElapsed = 0
+        RefreshDUI()
+    end)
+    frame:HookScript("OnShow", function() duiElapsed = 0; RefreshDUI() end)
+    frame:HookScript("OnHide", function() RefreshDUI() end) -- hides the overlays
+    frame:HookScript("OnSizeChanged", function() RefreshDUI() end)
     RefreshDUI()
-end)
+end
 
 local ICON_PATH = "Interface\\AddOns\\ForeverQuestTint\\Media\\Infinity.tga"
 -- The visible infinity sign inside Infinity.tga (a 64x64 image), in pixels.
@@ -612,7 +624,7 @@ local function ApplyMarker(fs, wanted, padBlock)
     fs.fqtMarked = new
 
     -- Blizzard rewrites tracker headers on every re-layout (moving an item, tracking a recipe);
-    -- the poll would only restore the marker up to 0.1s later, which shows as a blink. Re-mark
+    -- a deferred scan would only restore the marker a frame later, which shows as a blink. Re-mark
     -- the moment the text is set instead.
     if padBlock and not fs.fqtHooked and fs.SetText then
         fs.fqtHooked = true
@@ -767,8 +779,8 @@ local function TrackerSetLine(line, _, _, isHeader, text)
 end
 
 -- The objective tracker differs between clients, so as well as hooking the older WatchFrame
--- function, look through the tracker's text lines a few times a second and mark quest names.
--- The scan runs ten times a second, so it walks regions and children with select() over the
+-- function, look through the tracker's text lines whenever it updates and mark quest names.
+-- Scans can be frequent, so it walks regions and children with select() over the
 -- varargs instead of packing them into a new table per frame, and tracks visited frames in a
 -- reusable table rather than a fresh one per scan.
 local ColourBlockObjectives
@@ -834,7 +846,6 @@ function ScanTracker(frame)
     ScanChildren(frame:GetChildren())
 end
 
-local scanElapsed = 0
 local pollFailed = false
 local function ScanOnce()
     local root = ObjectiveTrackerFrame or WatchFrame
@@ -851,17 +862,25 @@ local function ScanOnceWrapper()
     end
 end
 
-local function TrackerPoll(_, dt)
+-- Any number of triggers in a frame collapse into one scan on the next frame.
+local scanPending = false
+local function RunScan()
+    scanPending = false
     if pollFailed then return end
-    scanElapsed = scanElapsed + dt
-    if scanElapsed < 0.1 then return end
-    scanElapsed = 0
-    -- If this ever errors, report it once and stop rather than erroring four times a second.
+    -- If this ever errors, report it once and stop rather than erroring on every update.
     local ok, err = pcall(ScanOnceWrapper)
     if not ok then
         pollFailed = true
         print("|cffff5555Forever Quest Tint:|r tracker markers disabled after an error: " .. tostring(err))
     end
+end
+
+local function QueueScan()
+    if scanPending or pollFailed then return end
+    local root = ObjectiveTrackerFrame or WatchFrame
+    if root and not root:IsVisible() then return end -- skipped while hidden; OnShow queues one
+    scanPending = true
+    C_Timer.After(0, RunScan)
 end
 
 local function RefreshTracker()
@@ -884,12 +903,32 @@ local function HookMarkers()
     end
     if not eventsHooked then
         eventsHooked = true
-        CreateFrame("Frame"):SetScript("OnUpdate", TrackerPoll)
-        local ev = CreateFrame("Frame")
-        for _, e in ipairs({ "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_TURNED_IN" }) do
-            ev:RegisterEvent(e)
+        -- Redraws of the tracker and its containers, plus its OnShow, trigger a scan.
+        for _, name in ipairs({ "ObjectiveTracker_Update", "WatchFrame_Update", "QuestObjectiveTracker_Update" }) do
+            if type(_G[name]) == "function" then hooksecurefunc(name, QueueScan) end
         end
-        ev:SetScript("OnEvent", function() titleMap = nil end)
+        local root = ObjectiveTrackerFrame or WatchFrame
+        if root then
+            if root.HookScript then root:HookScript("OnShow", QueueScan) end
+            if type(root.Update) == "function" then hooksecurefunc(root, "Update", QueueScan) end
+            for _, module in pairs(root.MODULES or {}) do
+                if type(module) == "table" then
+                    for _, fn in ipairs({ "Update", "MarkDirty", "LayoutContents" }) do
+                        if type(module[fn]) == "function" then hooksecurefunc(module, fn, QueueScan) end
+                    end
+                end
+            end
+        end
+        local ev = CreateFrame("Frame")
+        for _, e in ipairs({ "QUEST_LOG_UPDATE", "QUEST_ACCEPTED", "QUEST_REMOVED", "QUEST_TURNED_IN",
+                "QUEST_WATCH_UPDATE", "QUEST_WATCH_LIST_CHANGED", "SUPER_TRACKING_CHANGED", "PLAYER_ENTERING_WORLD" }) do
+            pcall(ev.RegisterEvent, ev, e) -- not every event exists on every client
+        end
+        ev:SetScript("OnEvent", function(_, event)
+            if event ~= "PLAYER_ENTERING_WORLD" then titleMap = nil end
+            QueueScan()
+        end)
+        QueueScan()
     end
 end
 
@@ -915,19 +954,22 @@ loader:SetScript("OnEvent", function(_, event, name)
     end
     HookLog()
     HookMarkers()
+    HookDUI()
 end)
 HookLog()
 HookMarkers()
-
+HookDUI()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
     ns.rev = ns.rev + 1
     Refresh()
+    HookDUI()
     RefreshDUI()
     RefreshLog()
     RefreshLogList()
     RefreshTracker()
+    QueueScan()
 end
 
 SLASH_FQT1 = "/fqt"
