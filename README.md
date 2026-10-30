@@ -26,6 +26,7 @@ Type `/fqt`, or open **Options → AddOns → Forever Quest Tint**.
 - **Top opacity**: strength where the fade ends. `0%` fades out completely.
 - **Fade length**: how far up the parchment the fade reaches.
 - **Quest name marker**: an infinity sign after the name of non-vanilla quests, in the quest log list and the objective tracker.
+  - **Add the logo beside quests in the tracker**: off by default. A small WoW Forever logo at the top-right of each non-vanilla quest in the objective tracker. Works with or without the marker.
   - Show or hide it, and put it at the start of the name instead of the end.
   - By default it is a small icon; you can set its height, nudge it up or down to line up with the text, and adjust its spacing from the name. Or switch to a plain text symbol (up to 4 characters, so you can use any character the game's font has).
   - By default it uses the tint colour; turn that off to pick its own colour.

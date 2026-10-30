@@ -6,6 +6,7 @@
 - Works with ClassicUI Forever: the tint on its quest log window and on its map parchment, and the quest name marker in its quest log list and quest watch. Pages its dark themes darken get a teal glow.
 - Works with Questie: the yellow ! and ? of non-vanilla quests on the world map and minimap are drawn in the tint colour. Grey, blue, event and PvP icons keep Questie's colours. New option, on by default.
 - Compatible with EllesmereUI: its Quest Tracker restyles Blizzard's objective tracker, so the quest name marker and objective colours carry over.
+- New option to add the WoW Forever logo beside non-vanilla quests in the objective tracker. Off by default.
 - New preview setting for testing: force the tint, logo and marker on or off for every quest, or leave it on auto. In the options panel, or `/fqt preview on|off|auto`. You get a reminder at login while it isn't on auto.
 - New `/fqt status`: version, game interface, preview mode and which supported UI addons were found.
 - The addon now has an icon in the AddOns list, and loads after Dialogue UI, Immersion, Lorewalker, Questie, ClassicUI Forever and EllesmereUI when they are installed.

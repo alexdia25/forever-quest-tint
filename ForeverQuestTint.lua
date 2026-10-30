@@ -18,6 +18,7 @@ ns.defaults = {
     markerGap = 0,         -- extra space between the icon and the quest name, in pixels
     markerUseTint = true,
     markerColor = { 0.60, 0.90, 0.95 },
+    trackerLogo = false, -- the WoW Forever logo beside non-vanilla quests in the objective tracker
     objectiveTint = false,     -- recolour the objective lines of non-vanilla quests
     objectiveUseTint = true,   -- objectives use the tint colour...
     objectiveColor = { 0.60, 0.90, 0.95 }, -- ...or this colour
@@ -919,6 +920,28 @@ local titleMap, BuildTitleMap, StripPrefixes -- defined further down; the SetTex
 -- marker adds a wrapped line also gets its block made taller by that line, because the tracker
 -- measured the block before the marker was added. With keep, the marker is put back whenever
 -- the text is rewritten (tracker headers, and the flat lists of other addons' quest watches).
+-- The logo beside a marked quest in the objective tracker: a small badge at the top-right of its block, level with
+-- the quest name. Blocks are pooled, so a reused block hides it again until its new quest is marked.
+local TRACKER_LOGO_SIZE = 14
+local TRACKER_LOGO_X, TRACKER_LOGO_Y = 0, 1 -- from the block's top-right corner (negative x = further in)
+
+local function UpdateTrackerLogo(block, wanted)
+    if not block or not block.CreateTexture then return end
+    local badge = block.fqtLogo
+    if not (wanted and ns.cfg.trackerLogo) then
+        if badge then badge:Hide() end
+        return
+    end
+    if not badge then
+        badge = block:CreateTexture(nil, "OVERLAY")
+        badge:SetTexture(LOGO_PATH)
+        badge:SetSize(TRACKER_LOGO_SIZE, TRACKER_LOGO_SIZE)
+        badge:SetPoint("TOPRIGHT", block, "TOPRIGHT", TRACKER_LOGO_X, TRACKER_LOGO_Y)
+        block.fqtLogo = badge
+    end
+    badge:Show()
+end
+
 local function ApplyMarker(fs, wanted, padBlock, keep)
     local cur = fs:GetText()
     if not cur then return end
@@ -960,17 +983,17 @@ local function ApplyMarker(fs, wanted, padBlock, keep)
             local text = self:GetText()
             if not text or text == "" or text == self.fqtMarked then return end
             if not titleMap then BuildTitleMap() end
+            -- Unmarked text too, so a reused tracker block drops its logo at once.
             local isMarked = titleMap[text] or titleMap[StripPrefixes(text)]
-            if isMarked then
-                self.fqtRemarking = true
-                ApplyMarker(self, isMarked, self.fqtPadBlock)
-                self.fqtRemarking = nil
-            end
+            self.fqtRemarking = true
+            ApplyMarker(self, isMarked, self.fqtPadBlock)
+            self.fqtRemarking = nil
         end)
     end
 
     if padBlock then
         local block = fs.GetParent and fs:GetParent()
+        UpdateTrackerLogo(block, wanted)
         local pad = useMarker and fs.fqtPad or 0
         if block and block.SetHeight then
             local h = block:GetHeight()
