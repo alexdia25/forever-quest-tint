@@ -887,6 +887,54 @@ local function HookLorewalker()
     RefreshLorewalker()
 end
 
+-- Storyline (addon): quest text in a speech bubble (Storyline_NPCFrameChat) along the bottom of its scene, a dark
+-- chat-bubble backdrop with 16px edges. The wash stays inside those edges, so it follows the bubble's shape; the
+-- scene above is zone art and is left alone. Storyline_NPCFrameChat.event is what the bubble is showing.
+local SL_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
+local SL_INSET = 14                     -- inside the bubble's edge pieces
+local SL_SCALE, SL_ALPHA = 0.75, 0.6    -- a deeper teal glow on the dark bubble
+local SL_LOGO_SIZE = 24
+local SL_LOGO_X, SL_LOGO_Y = -16, -10   -- from the bubble's top-right, in the margin beside the NPC's name
+
+local slInner -- the bubble's inside, for the wash to cover
+local function RefreshStoryline()
+    local frame, chat = _G.Storyline_NPCFrame, _G.Storyline_NPCFrameChat
+    if not frame or not chat then return end
+    local show = frame:IsVisible() and chat:IsVisible() and SL_EVENTS[chat.event] and IsMarked(GetQuestID())
+    if show and ns.cfg.showTint then
+        if not slInner then
+            slInner = CreateFrame("Frame", nil, chat)
+            slInner:SetPoint("TOPLEFT", SL_INSET, -SL_INSET)
+            slInner:SetPoint("BOTTOMRIGHT", -SL_INSET, SL_INSET)
+        end
+        ApplyFlat("storyline", chat, slInner, SL_SCALE, SL_ALPHA)
+    else
+        HideFlat("storyline")
+    end
+    ApplyBadge("storyline", chat, show and ns.cfg.showLogo, "TOPRIGHT", "TOPRIGHT", SL_LOGO_X, SL_LOGO_Y, SL_LOGO_SIZE)
+end
+
+local slHooked = false
+local function HookStoryline()
+    local frame, chat = _G.Storyline_NPCFrame, _G.Storyline_NPCFrameChat
+    if slHooked or not frame or not chat or not frame.HookScript then return end
+    slHooked = true
+    local function refreshSoon()
+        RefreshStoryline()
+        C_Timer.After(0, RefreshStoryline)
+    end
+    frame:HookScript("OnShow", refreshSoon)
+    frame:HookScript("OnHide", RefreshStoryline)
+    -- The bubble grows and shrinks with each page of text.
+    chat:HookScript("OnSizeChanged", RefreshStoryline)
+    -- Each new dialogue (and so each quest event) starts here.
+    local api = _G.Storyline_API
+    if type(api) == "table" and type(api.startDialog) == "function" then
+        hooksecurefunc(api, "startDialog", refreshSoon)
+    end
+    RefreshStoryline()
+end
+
 local ICON_PATH = "Interface\\AddOns\\ForeverQuestTint\\Media\\Infinity.tga"
 -- The visible infinity sign inside Infinity.tga (a 64x64 image), in pixels.
 local ICON_L, ICON_R, ICON_T, ICON_B = 1, 63, 12, 51
@@ -1401,6 +1449,7 @@ loader:SetScript("OnEvent", function(_, event, name)
     HookLorewalker()
     HookCUIF()
     HookQuestie()
+    HookStoryline()
 end)
 HookLog()
 HookMarkers()
@@ -1409,6 +1458,7 @@ HookImmersion()
 HookLorewalker()
 HookCUIF()
 HookQuestie()
+HookStoryline()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
@@ -1424,6 +1474,8 @@ function ns.Reapply()
     HookCUIF()
     HookQuestie()
     RefreshQuestie()
+    HookStoryline()
+    RefreshStoryline()
     RefreshLog()
     RefreshLogList()
     RefreshTracker()
@@ -1474,8 +1526,8 @@ local function Status()
     print(("  ClassicUI Forever: %s (quest log %s, quest watch %s)  EllesmereUI Quest Tracker: %s"):format(
         loaded("ClassicUIForever"), cuifHooked.log and "hooked" or "not built yet",
         cuifHooked.watch and "hooked" or "not built yet", loaded("EllesmereUIQuestTracker")))
-    print(("  Questie: %s (map icons %s, %d hooked)"):format(loaded("Questie"),
-        questieHooked and "hooked" or "not hooked", #questieFrames))
+    print(("  Questie: %s (map icons %s, %d hooked)  Storyline: %s (hooked %s)"):format(loaded("Questie"),
+        questieHooked and "hooked" or "not hooked", #questieFrames, loaded("Storyline"), tostring(slHooked)))
 end
 
 SLASH_FQT1 = "/fqt"
