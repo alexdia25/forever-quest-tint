@@ -2,11 +2,13 @@
 
 ## 0.7.0
 - Works with the Immersion addon: its talking-head box gets a teal glow that follows the box's shape, and the optional logo, while it shows quest text.
+- Works with Lorewalker's Classic mode: its quest page gets a teal wash that follows the page's outline (a deeper glow on its Dark theme), and the optional logo on its title bar.
+- Works with ClassicUI Forever: the tint on its quest log window and on its map parchment, and the quest name marker in its quest log list and quest watch. Pages its dark themes darken get a teal glow.
 - Compatible with EllesmereUI: its Quest Tracker restyles Blizzard's objective tracker, so the quest name marker and objective colours carry over.
 - New preview setting for testing: force the tint, logo and marker on or off for every quest, or leave it on auto. In the options panel, or `/fqt preview on|off|auto`. You get a reminder at login while it isn't on auto.
 - New `/fqt status`: version, game interface, preview mode and which supported UI addons were found.
-- Also loads on retail (Midnight), for testing. The objective tracker scan picks up Midnight's tracker modules.
-- The addon now has an icon in the AddOns list, and loads after Dialogue UI, Immersion and EllesmereUI when they are installed.
+- Also loads on retail (Midnight, including the 12.1.7 test realm), for testing. The objective tracker scan picks up Midnight's tracker modules.
+- The addon now has an icon in the AddOns list, and loads after Dialogue UI, Immersion, Lorewalker, ClassicUI Forever and EllesmereUI when they are installed.
 
 ## 0.6.3
 - Fixed idle CPU use while the objective tracker is visible. The tracker is now rescanned only when it or the quest log changes, instead of ten times a second, and the Dialogue UI size watcher only runs while the Dialogue UI quest window is open. Thanks to the reporter of issue #2.

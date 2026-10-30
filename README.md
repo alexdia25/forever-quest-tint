@@ -52,13 +52,15 @@ Nothing to configure: the addon detects these on its own (`/fqt status` shows wh
 
 - **Dialogue UI**: its quest window gets the tint (matching its Brown and Dark themes) and the logo. Dialogue UI doesn't load on the Forever client out of the box: in its `DialogueUI.toc`, delete the `## X-Expansion: MAINLINE` line and add `, 16001` to the `## Interface:` line.
 - **Immersion**: its talking-head box gets a teal glow that follows the box's shape, and the logo in its top-right corner, while it shows quest text. Gossip is left alone.
+- **Lorewalker**: in its Classic mode, the quest page gets a teal wash that follows the page's outline (a deeper glow on its Dark theme), and the logo on the title bar. Gossip is left alone. Its Immersive and Story modes have no page, so they are unchanged. Lorewalker gives quests it considers new to Forever a page of its own; the tint and logo follow this addon's list.
+- **ClassicUI Forever**: its quest log window gets the teal wash on the selected quest's page, and the quest name marker in its list. Its quest watch gets the marker too. On the map, the tint follows its parchment when its quest pane is on, and its dark themes get a teal glow instead of the copy of the paper. Its quest-giver window is the game's, so it is tinted as usual. Not covered yet: its combined map's quest pages, the logo in its quest log, and objective colours in its quest watch.
 - **EllesmereUI**: its Quest Tracker restyles Blizzard's objective tracker, so the quest name marker and objective colours work in it as usual. EllesmereUI shows quest names on a single line, so a long name can cut off a marker placed after it; if that happens, tick **Put the marker at the start of the name**.
 
 Using another quest or tracker addon? Open an issue with its name.
 
 ## Game versions
 
-Built for World of Warcraft: Forever (interface `16001`). It also loads on retail (Midnight, `120100`/`120105`), which is useful for testing alongside `/fqt preview`. It relies on Blizzard's quest window and quest log art, so it may need updates if that changes.
+Built for World of Warcraft: Forever (interface `16001`). It also loads on retail (Midnight, `120100`/`120105`, and the `120107` test realm), which is useful for testing alongside `/fqt preview`. It relies on Blizzard's quest window and quest log art, so it may need updates if that changes.
 
 ## Licence
 

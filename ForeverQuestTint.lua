@@ -85,6 +85,12 @@ local function IsDarkBackground()
     return tonumber(GetCVar("QuestTextContrast") or 0) == 4
 end
 
+-- A page another addon has darkened through its vertex colour (ClassicUI Forever's dark themes) gets the glow too.
+local function IsInkedDark(tex)
+    local r, g, b = tex:GetVertexColor()
+    return r ~= nil and 0.3 * r + 0.59 * g + 0.11 * b < 0.35
+end
+
 local LOGO_PATH = "Interface/AddOns/ForeverQuestTint/Media/ForeverLogo.tga"
 local logos = setmetatable({}, { __mode = "k" })
 
@@ -183,7 +189,7 @@ local function ApplyOverlay(tex, tinted, noLogo)
     local rewardsTop = rewards and rewards:IsShown() and rewards:GetTop()
     -- Called up to 20 times a second by the keeper: if nothing it depends on has changed, stop here.
     local atlas = tex:GetAtlas()
-    local dark = IsDarkBackground()
+    local dark = IsDarkBackground() or IsInkedDark(tex)
     if ov:IsShown() and ov.fqtRev == ns.rev and ov.fqtTop == bgTop and ov.fqtBottom == bgBottom
         and ov.fqtRewards == (rewardsTop or false) and ov.fqtAtlas == atlas and ov.fqtDark == dark then
         return
@@ -332,10 +338,13 @@ local function TintLogFrame(tinted)
     if not QuestMapFrame then return end
     logTinted = tinted
     if tinted then keeper:Show() end
-    -- Blizzard's own key for the parchment; works whatever atlas the contrast setting uses.
+    -- Blizzard's own key for the parchment; works whatever atlas the contrast setting uses. ClassicUI Forever hides
+    -- it and lays its own parchment, kept in details.fcui.parchment, while its map quest pane is on.
     local details = QuestMapFrame.DetailsFrame
-    local bg = details and details.Bg
+    local own = details and details.fcui and details.fcui.parchment
+    local bg = (own and own:IsShown() and own) or (details and details.Bg)
     if bg and bg.GetTexture then
+        if logBg and logBg ~= bg then ApplyOverlay(logBg, false) end
         logBg = bg
         ApplyOverlay(bg, tinted)
         return
@@ -673,6 +682,135 @@ local function HookImmersion()
     RefreshImmersion()
 end
 
+-- A flat teal wash over the bottom of a page whose art can't simply be copied (sliced art, or a window's art in
+-- pieces), like the Black contrast setting's glow above: brightness `scale` and strength `strength` (relative to
+-- cfg.alpha). An optional mask (file and texture coordinates) trims it to the page's own outline. Drawn one
+-- sublevel above `region` when it is a texture, else at the top of `parent`'s background layer.
+local flats = {}
+local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoords)
+    local ov = flats[key]
+    local height = region and region:GetHeight()
+    if not height or height <= 0 then
+        if ov then ov:Hide() end
+        return
+    end
+    if not ov then
+        ov = parent:CreateTexture(nil, "BACKGROUND", nil, 7)
+        flats[key] = ov
+    end
+    if region.GetDrawLayer then
+        local layer, sublevel = region:GetDrawLayer()
+        ov:SetDrawLayer(layer, math.min((sublevel or 0) + 1, 7))
+    end
+    if maskFile then
+        if not ov.fqtMask then
+            ov.fqtMask = parent:CreateMaskTexture()
+            ov:AddMaskTexture(ov.fqtMask)
+        end
+        ov.fqtMask:ClearAllPoints()
+        ov.fqtMask:SetAllPoints(region)
+        ov.fqtMask:SetTexture(maskFile, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+        if maskCoords then ov.fqtMask:SetTexCoord(unpack(maskCoords)) end
+    end
+    local cfg = ns.cfg
+    local c = cfg.tint
+    ov:ClearAllPoints()
+    ov:SetPoint("BOTTOMLEFT", region, "BOTTOMLEFT")
+    ov:SetPoint("BOTTOMRIGHT", region, "BOTTOMRIGHT")
+    ov:SetHeight(height * cfg.height)
+    ov:SetColorTexture(1, 1, 1, 1)
+    ov:SetGradient("VERTICAL",
+        CreateColor(c[1] * scale, c[2] * scale, c[3] * scale, cfg.alpha * strength),
+        CreateColor(c[1] * scale, c[2] * scale, c[3] * scale, cfg.topAlpha * strength))
+    ov:Show()
+end
+
+local function HideFlat(key)
+    if flats[key] then flats[key]:Hide() end
+end
+
+-- The logo as a small badge on `anchor`, created on first use and kept per key.
+local badges = {}
+local function ApplyBadge(key, anchor, show, point, relPoint, x, y, size)
+    local badge = badges[key]
+    if not show or not anchor then
+        if badge then badge:Hide() end
+        return
+    end
+    if not badge then
+        badge = CreateFrame("Frame", nil, anchor)
+        badge:SetFrameLevel(math.min(anchor:GetFrameLevel() + 20, 9999))
+        badge.texture = badge:CreateTexture(nil, "OVERLAY")
+        badge.texture:SetAllPoints()
+        badge.texture:SetTexture(LOGO_PATH)
+        badges[key] = badge
+    end
+    badge:SetSize(size, size)
+    badge:ClearAllPoints()
+    badge:SetPoint(point, anchor, relPoint, x, y)
+    badge:Show()
+end
+
+-- Lorewalker (addon), Classic mode: quest text in LWDialogFrame, on a page drawn by ContentFrame.BackgroundTexture
+-- (a frame holding the real, sliced texture in __Texture). Its QuestFrame part is shown only for quests, not gossip.
+-- Lorewalker gives quests it considers new to Forever a page of its own; the tint and logo follow this addon's list.
+-- Its Immersive and Story modes have no page, so they are left alone.
+local LW_PAGE_COORDS = { 0, 366 / 512, 0, 466 / 512 } -- the page within each of Lorewalker's 512x512 page sheets
+local LW_SCALE, LW_ALPHA = 1, 0.55            -- light pages: the tint colour, a little over half strength
+local LW_DARK_SCALE, LW_DARK_ALPHA = 0.75, 0.6 -- Dark theme: a deeper teal glow
+local LW_LOGO_SIZE = 24
+local LW_LOGO_X = -62 -- from the right end of the title bar, clear of its settings and close buttons
+
+local function LorewalkerDark(texture)
+    local file = texture and texture:GetTexture()
+    if type(file) == "string" then return file:lower():find("questbackgrounddark", 1, true) ~= nil end
+    return type(LorewalkerDB_Global) == "table" and LorewalkerDB_Global.Theme == 2 -- Lorewalker's Theme: 2 = Dark
+end
+
+local function RefreshLorewalker()
+    local frame = _G.LWDialogFrame
+    local content = frame and frame.ContentFrame
+    local page = content and content.BackgroundTexture
+    if not page or not frame.QuestFrame then return end
+    local show = frame:IsVisible() and frame.QuestFrame:IsShown() and IsMarked(GetQuestID())
+    if show and ns.cfg.showTint then
+        local texture = page.__Texture
+        local dark = LorewalkerDark(texture)
+        ApplyFlat("lorewalker", page, texture or page,
+            dark and LW_DARK_SCALE or LW_SCALE, dark and LW_DARK_ALPHA or LW_ALPHA,
+            texture and texture:GetTexture(), LW_PAGE_COORDS)
+    else
+        HideFlat("lorewalker")
+    end
+    ApplyBadge("lorewalker", frame.TitleContainer, show and ns.cfg.showLogo, "RIGHT", "RIGHT", LW_LOGO_X, 0, LW_LOGO_SIZE)
+end
+
+local lwHooked = false
+local function HookLorewalker()
+    local frame = _G.LWDialogFrame
+    if lwHooked or not frame or not frame.QuestFrame or not frame.HookScript then return end
+    lwHooked = true
+    local function refreshSoon()
+        RefreshLorewalker()
+        C_Timer.After(0, RefreshLorewalker)
+    end
+    frame:HookScript("OnShow", refreshSoon)
+    frame:HookScript("OnHide", RefreshLorewalker)
+    frame.QuestFrame:HookScript("OnShow", refreshSoon)
+    frame.QuestFrame:HookScript("OnHide", RefreshLorewalker)
+    -- The window can be resized, and the page swaps its texture with the theme and the quest.
+    local page = frame.ContentFrame and frame.ContentFrame.BackgroundTexture
+    if page and page.HookScript then page:HookScript("OnSizeChanged", RefreshLorewalker) end
+    if page and page.__Texture then hooksecurefunc(page.__Texture, "SetTexture", refreshSoon) end
+    -- One quest can follow another without the window closing in between.
+    local ev = CreateFrame("Frame")
+    for _, e in ipairs({ "QUEST_DETAIL", "QUEST_PROGRESS", "QUEST_COMPLETE", "QUEST_GREETING", "QUEST_FINISHED", "GOSSIP_SHOW" }) do
+        pcall(ev.RegisterEvent, ev, e)
+    end
+    ev:SetScript("OnEvent", refreshSoon)
+    RefreshLorewalker()
+end
+
 local ICON_PATH = "Interface\\AddOns\\ForeverQuestTint\\Media\\Infinity.tga"
 -- The visible infinity sign inside Infinity.tga (a 64x64 image), in pixels.
 local ICON_L, ICON_R, ICON_T, ICON_B = 1, 63, 12, 51
@@ -704,8 +842,9 @@ local titleMap, BuildTitleMap, StripPrefixes -- defined further down; the SetTex
 -- Sets fs's text to the marked (or original) version. Remembers the original so this can be
 -- re-run safely, including after Blizzard rewrites the text. With padBlock, an entry whose
 -- marker adds a wrapped line also gets its block made taller by that line, because the tracker
--- measured the block before the marker was added.
-local function ApplyMarker(fs, wanted, padBlock)
+-- measured the block before the marker was added. With keep, the marker is put back whenever
+-- the text is rewritten (tracker headers, and the flat lists of other addons' quest watches).
+local function ApplyMarker(fs, wanted, padBlock, keep)
     local cur = fs:GetText()
     if not cur then return end
     local base = cur
@@ -738,17 +877,18 @@ local function ApplyMarker(fs, wanted, padBlock)
     -- Blizzard rewrites tracker headers on every re-layout (moving an item, tracking a recipe);
     -- a deferred scan would only restore the marker a frame later, which shows as a blink. Re-mark
     -- the moment the text is set instead.
-    if padBlock and not fs.fqtHooked and fs.SetText then
+    if (padBlock or keep) and not fs.fqtHooked and fs.SetText then
         fs.fqtHooked = true
+        fs.fqtPadBlock = padBlock
         hooksecurefunc(fs, "SetText", function(self)
             if self.fqtRemarking then return end
             local text = self:GetText()
             if not text or text == "" or text == self.fqtMarked then return end
             if not titleMap then BuildTitleMap() end
-            local wanted = titleMap[text] or titleMap[StripPrefixes(text)]
-            if wanted then
+            local isMarked = titleMap[text] or titleMap[StripPrefixes(text)]
+            if isMarked then
                 self.fqtRemarking = true
-                ApplyMarker(self, wanted, true)
+                ApplyMarker(self, isMarked, self.fqtPadBlock)
                 self.fqtRemarking = nil
             end
         end)
@@ -919,6 +1059,7 @@ end
 
 local scanGen = 0
 local scanSeen = setmetatable({}, { __mode = "k" })
+local scanFlat = false -- scanning a flat list of lines (another addon's quest watch), not the tracker's blocks
 local ScanTracker
 
 local function ScanRegion(region)
@@ -928,8 +1069,10 @@ local function ScanRegion(region)
     local base = (region.fqtMarked and text == region.fqtMarked) and region.fqtBase or text
     local wanted = titleMap[base] or titleMap[StripPrefixes(base)]
     if wanted or region.fqtMarked then
-        ApplyMarker(region, wanted, true)
+        -- A flat list's lines all share one parent, so there is no block to pad (or to recolour below).
+        ApplyMarker(region, wanted, not scanFlat, true)
     end
+    if scanFlat then return end
     local colourOn = wanted and ns.cfg.objectiveTint
     if colourOn or region.fqtColouredBlock then
         local block = region.GetParent and region:GetParent()
@@ -958,13 +1101,31 @@ function ScanTracker(frame)
     ScanChildren(frame:GetChildren())
 end
 
+-- Lists of quest names to mark besides the tracker: ClassicUI Forever's quest watch and quest log list.
+-- Filled in by HookCUIF.
+local flatRoots = {}
+
+local function AnyRootVisible()
+    local root = ObjectiveTrackerFrame or WatchFrame
+    if root and root:IsVisible() then return true end
+    for _, flat in ipairs(flatRoots) do
+        if flat:IsVisible() then return true end
+    end
+    return false
+end
+
 local pollFailed = false
 local function ScanOnce()
-    local root = ObjectiveTrackerFrame or WatchFrame
-    if not root or not root:IsVisible() then return end
+    if not AnyRootVisible() then return end
     if not titleMap then BuildTitleMap() end
     scanGen = scanGen + 1
-    ScanTracker(root)
+    local root = ObjectiveTrackerFrame or WatchFrame
+    if root and root:IsVisible() then ScanTracker(root) end
+    scanFlat = true
+    for _, flat in ipairs(flatRoots) do
+        if flat:IsVisible() then ScanTracker(flat) end
+    end
+    scanFlat = false
 end
 
 local function ScanOnceWrapper()
@@ -989,8 +1150,7 @@ end
 
 local function QueueScan()
     if scanPending or pollFailed then return end
-    local root = ObjectiveTrackerFrame or WatchFrame
-    if root and not root:IsVisible() then return end -- skipped while hidden; OnShow queues one
+    if not AnyRootVisible() then return end -- skipped while hidden; OnShow queues one
     scanPending = true
     C_Timer.After(0, RunScan)
 end
@@ -1000,6 +1160,71 @@ local function RefreshTracker()
         titleMap = nil
         WatchFrame_Update()
     end
+end
+
+-- ClassicUI Forever (addon): its 1.x quest log window and its Era quest watch, both built on first use and found
+-- through its public API (ClassicUIForeverAPI.GetFrame). The parts used below (the log's detail pane and list area)
+-- are its internals, so each is checked before use. Its quest-giver window is the game's and its map pane's parchment
+-- is handled in TintLogFrame, so the tint above covers those already.
+local CUIF_SCALE, CUIF_ALPHA = 1, 0.55 -- the wash on its quest log page: the tint colour, a little over half strength
+
+local function CUIFFrame(name)
+    local api = _G.ClassicUIForeverAPI
+    if not (api and api.GetFrame) then return nil end
+    local ok, frame = pcall(api.GetFrame, name)
+    return ok and frame or nil
+end
+
+-- The log shows the quest it last selected through C_QuestLog.SetSelectedQuest. (When nothing is selected it may
+-- show its first quest without selecting it; that page stays plain until a quest is picked.)
+local function RefreshCUIFLog()
+    local frame = CUIFFrame("questLog")
+    local detail = frame and frame.detail
+    if not detail then return end
+    local id = C_QuestLog and C_QuestLog.GetSelectedQuest and C_QuestLog.GetSelectedQuest()
+    if ns.cfg.showTint and frame:IsVisible() and detail:IsShown() and IsMarked(id) then
+        ApplyFlat("cuifLog", frame, detail, CUIF_SCALE, CUIF_ALPHA)
+    else
+        HideFlat("cuifLog")
+    end
+end
+
+local cuifHooked = {}
+local function AddFlatRoot(root)
+    if not root or not root.HookScript then return end
+    for _, flat in ipairs(flatRoots) do
+        if flat == root then return end
+    end
+    table.insert(flatRoots, root)
+    root:HookScript("OnShow", QueueScan)
+    QueueScan()
+end
+
+local function HookCUIF()
+    if not _G.ClassicUIForeverAPI then return end
+    if not cuifHooked.select and C_QuestLog and C_QuestLog.SetSelectedQuest then
+        cuifHooked.select = true
+        hooksecurefunc(C_QuestLog, "SetSelectedQuest", function()
+            RefreshCUIFLog()
+            C_Timer.After(0, RefreshCUIFLog)
+        end)
+    end
+    local watch = CUIFFrame("questWatch")
+    if watch then
+        cuifHooked.watch = true
+        AddFlatRoot(watch)
+    end
+    local log = CUIFFrame("questLog")
+    if log and not cuifHooked.log and log.detail then
+        cuifHooked.log = true
+        log:HookScript("OnShow", RefreshCUIFLog)
+        log:HookScript("OnHide", RefreshCUIFLog)
+        log.detail:HookScript("OnShow", RefreshCUIFLog)
+        log.detail:HookScript("OnHide", RefreshCUIFLog)
+        log.detail:HookScript("OnSizeChanged", RefreshCUIFLog) -- single and double pane layouts
+        AddFlatRoot(log.listArea)
+    end
+    RefreshCUIFLog()
 end
 
 local listHooked, trackerHooked, eventsHooked = false, false, false
@@ -1039,6 +1264,7 @@ local function HookMarkers()
         end
         ev:SetScript("OnEvent", function(_, event)
             if event ~= "PLAYER_ENTERING_WORLD" then titleMap = nil end
+            HookCUIF() -- its windows are built on first use
             QueueScan()
         end)
         QueueScan()
@@ -1074,11 +1300,15 @@ loader:SetScript("OnEvent", function(_, event, name)
     HookMarkers()
     HookDUI()
     HookImmersion()
+    HookLorewalker()
+    HookCUIF()
 end)
 HookLog()
 HookMarkers()
 HookDUI()
 HookImmersion()
+HookLorewalker()
+HookCUIF()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
@@ -1089,6 +1319,9 @@ function ns.Reapply()
     RefreshDUI()
     HookImmersion()
     RefreshImmersion()
+    HookLorewalker()
+    RefreshLorewalker()
+    HookCUIF()
     RefreshLog()
     RefreshLogList()
     RefreshTracker()
@@ -1133,9 +1366,12 @@ local function Status()
         tostring(C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version")
             or GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")),
         tostring(interface), tostring(build), PREVIEW_TEXT[ns.cfg.preview] or tostring(ns.cfg.preview)))
-    print(("  Dialogue UI: %s (hooked %s)  Immersion: %s (hooked %s)  EllesmereUI Quest Tracker: %s"):format(
+    print(("  Dialogue UI: %s (hooked %s)  Immersion: %s (hooked %s)  Lorewalker: %s (hooked %s)"):format(
         loaded("DialogueUI"), tostring(duiWatcher ~= nil), loaded("Immersion"), tostring(immHooked),
-        loaded("EllesmereUIQuestTracker")))
+        loaded("Lorewalker"), tostring(lwHooked)))
+    print(("  ClassicUI Forever: %s (quest log %s, quest watch %s)  EllesmereUI Quest Tracker: %s"):format(
+        loaded("ClassicUIForever"), cuifHooked.log and "hooked" or "not built yet",
+        cuifHooked.watch and "hooked" or "not built yet", loaded("EllesmereUIQuestTracker")))
 end
 
 SLASH_FQT1 = "/fqt"
