@@ -1,0 +1,15 @@
+# Development only: lets this folder load on retail (Midnight) for testing. Retail prefers this file over
+# ForeverQuestTint.toc; Forever uses ForeverQuestTint.toc. Not packaged (see .pkgmeta), so releases are
+# Forever-only. Keep everything below the interface line in step with ForeverQuestTint.toc.
+## Interface: 120100, 120105, 120107
+## Title: Forever Quest Tint
+## Notes: Tints the quest window teal and marks quest names for quests that were not in original Classic.
+## Author: xanastar
+## Version: 0.7.0
+## IconTexture: Interface\AddOns\ForeverQuestTint\Media\ForeverLogo
+## SavedVariables: ForeverQuestTintDB
+## OptionalDeps: DialogueUI, Immersion, Lorewalker, ClassicUIForever, EllesmereUI, EllesmereUIQuestTracker
+
+VanillaQuests.lua
+ForeverQuestTint.lua
+Options.lua

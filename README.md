@@ -60,7 +60,11 @@ Using another quest or tracker addon? Open an issue with its name.
 
 ## Game versions
 
-Built for World of Warcraft: Forever (interface `16001`). It also loads on retail (Midnight, `120100`/`120105`, and the `120107` test realm), which is useful for testing alongside `/fqt preview`. It relies on Blizzard's quest window and quest log art, so it may need updates if that changes.
+For World of Warcraft: Forever only (interface `16001`). It relies on Blizzard's quest window and quest log art, so it may need updates if that changes.
+
+## Development
+
+`ForeverQuestTint_Mainline.toc` lets a copy of this folder load on retail (Midnight) for testing, together with `/fqt preview`. It is left out of release packages, so releases load on Forever only. When you change `ForeverQuestTint.toc`, make the same change below the interface line in the dev TOC.
 
 ## Licence
 

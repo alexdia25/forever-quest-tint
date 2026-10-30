@@ -1,4 +1,4 @@
-## Interface: 16001, 120100, 120105, 120107
+## Interface: 16001
 ## Title: Forever Quest Tint
 ## Notes: Tints the quest window teal and marks quest names for quests that were not in original Classic.
 ## Author: xanastar
