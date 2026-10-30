@@ -11,7 +11,7 @@ Vanilla quests keep the normal parchment. Everything new to Forever gets a teal 
 ## Install
 
 1. Download the latest release zip.
-2. Extract it so you have `World of Warcraft\_classic_beta_\Interface\AddOns\ForeverQuestTint`.
+2. Extract it into the `Interface\AddOns` folder of your World of Warcraft: Forever install, so you have `...\Interface\AddOns\ForeverQuestTint`.
 3. Restart the game or type `/reload`.
 
 ## Options
@@ -31,7 +31,14 @@ Type `/fqt`, or open **Options → AddOns → Forever Quest Tint**.
 
 - **Quest objectives**: off by default. Recolours the objective lines of non-vanilla quests (in the quest log list and the tracker) from white to the tint colour, or a colour of your choice. Completed and failed objectives keep their own colours.
 
-`/fqt id` prints the ID of the quest you have open, and whether the addon considers it vanilla.
+- **Preview**: a testing aid. Forces the tint, logo and marker **on** for every quest, **off** for every quest, or back to **auto** (the normal behaviour). It is remembered between sessions, and the addon reminds you at login while it is not on auto.
+
+### Commands
+
+- `/fqt`: open the options.
+- `/fqt preview on`, `/fqt preview off`, `/fqt preview auto`: set the preview. `/fqt preview` on its own cycles auto → on → off. `/fqt glow` works too.
+- `/fqt id`: the ID of the quest you have open, and whether the addon considers it vanilla.
+- `/fqt status`: the addon version, game interface, preview mode, and which supported UI addons were detected.
 
 ## How it decides what is vanilla
 
@@ -39,10 +46,19 @@ The addon contains a list of the quest IDs that existed in original Classic (`Va
 
 Only quests that are open in a quest window are tinted. Gossip windows have no quest ID, so they are left alone.
 
-## Notes
+## Other UI addons
 
-- Compatible with Dialogue UI: its quest window gets the tint and logo too. Nothing to configure. The marker and tracker features are unaffected. Dialogue UI doesn't load on the Forever client out of the box: in its `DialogueUI.toc`, delete the `## X-Expansion: MAINLINE` line and add `, 16001` to the `## Interface:` line.
-- Built for the Forever beta (interface `16001`). It relies on Blizzard's quest log art, so it may need updates if that changes.
+Nothing to configure: the addon detects these on its own (`/fqt status` shows what it found).
+
+- **Dialogue UI**: its quest window gets the tint (matching its Brown and Dark themes) and the logo. Dialogue UI doesn't load on the Forever client out of the box: in its `DialogueUI.toc`, delete the `## X-Expansion: MAINLINE` line and add `, 16001` to the `## Interface:` line.
+- **Immersion**: its talking-head box gets a teal glow that follows the box's shape, and the logo in its top-right corner, while it shows quest text. Gossip is left alone.
+- **EllesmereUI**: its Quest Tracker restyles Blizzard's objective tracker, so the quest name marker and objective colours work in it as usual. EllesmereUI shows quest names on a single line, so a long name can cut off a marker placed after it; if that happens, tick **Put the marker at the start of the name**.
+
+Using another quest or tracker addon? Open an issue with its name.
+
+## Game versions
+
+Built for World of Warcraft: Forever (interface `16001`). It also loads on retail (Midnight, `120100`/`120105`), which is useful for testing alongside `/fqt preview`. It relies on Blizzard's quest window and quest log art, so it may need updates if that changes.
 
 ## Licence
 

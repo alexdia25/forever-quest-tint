@@ -14,7 +14,7 @@ title:SetText("Forever Quest Tint")
 
 local sub = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-sub:SetText("Marks quests that were not in original Classic: a teal tint on the quest text background, and/or the WoW Forever logo.\nOpen a non-vanilla quest in the Map & Quest Log to preview changes.")
+sub:SetText("Marks quests that were not in original Classic: a teal tint on the quest text background, and/or the WoW Forever logo.\nOpen a non-vanilla quest in the Map & Quest Log to preview changes, or use Preview below to try it on any quest.")
 sub:SetJustifyH("LEFT")
 
 -- Independent on/off options
@@ -205,6 +205,23 @@ local iconHeightSlider = widgets.markerHeight
 MakeSlider("Icon vertical position", "markerOffset", -8, 8, 1, " px", iconHeightSlider)
 MakeSlider("Icon spacing from the name", "markerGap", 0, 12, 1, " px", widgets.markerOffset)
 
+-- Preview: a testing aid that forces the tint, logo and marker on or off for every quest
+-- (right column, under the marker sliders). Also /fqt preview on|off|auto.
+local previewHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+previewHeader:SetPoint("TOPLEFT", widgets.markerGap, "BOTTOMLEFT", 0, -28)
+previewHeader:SetText("Preview")
+
+local previewButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+previewButton:SetSize(140, 24)
+previewButton:SetPoint("TOPLEFT", previewHeader, "BOTTOMLEFT", 0, -10)
+previewButton:SetText("Change preview")
+previewButton:SetScript("OnClick", function() ns.SetPreview() end)
+
+local previewText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+previewText:SetPoint("TOPLEFT", previewButton, "BOTTOMLEFT", 0, -8)
+previewText:SetWidth(260)
+previewText:SetJustifyH("LEFT")
+
 
 -- Objective lines: optional recolour for non-vanilla quests (left column, under the sliders)
 local objHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -285,8 +302,11 @@ function Sync()
     for _, key in ipairs({ "alpha", "topAlpha", "height", "markerHeight", "markerOffset", "markerGap" }) do
         widgets[key]:SetValue(math.floor(c[key] * sliderScale[key] + 0.5))
     end
+    previewText:SetText("Tint is " .. (ns.PREVIEW_TEXT[c.preview] or tostring(c.preview))
+        .. ".\nFor testing only: \"auto\" is the normal behaviour.")
     syncing = false
 end
+ns.SyncOptions = Sync
 
 reset:SetScript("OnClick", function()
     for k, v in pairs(ns.defaults) do

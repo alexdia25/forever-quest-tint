@@ -21,6 +21,7 @@ ns.defaults = {
     objectiveTint = false,     -- recolour the objective lines of non-vanilla quests
     objectiveUseTint = true,   -- objectives use the tint colour...
     objectiveColor = { 0.60, 0.90, 0.95 }, -- ...or this colour
+    preview = "auto", -- testing aid: "auto" marks non-vanilla quests, "on" marks every quest, "off" none
 }
 
 local function CopyDefaults(dst, src)
@@ -60,6 +61,16 @@ local function IsVanilla(id)
         end
     end
     return false
+end
+
+-- Whether a quest gets the tint, logo and marker. The preview setting overrides the vanilla list,
+-- so the look can be checked on any client (or any quest) without hunting for a non-vanilla one.
+local function IsMarked(id)
+    if not id or id <= 0 then return false end
+    local preview = ns.cfg.preview
+    if preview == "on" then return true end
+    if preview == "off" then return false end
+    return not IsVanilla(id)
 end
 
 local REWARDS_OVERLAP = 24 -- how far the overlay tucks under the Rewards panel
@@ -279,18 +290,17 @@ local function SetTinted(tinted)
     end
 end
 
-local currentTint = false
+local currentQuestID = 0 -- the quest open in the quest-giver window; 0 for greetings
 
 local function Refresh()
     if QuestFrame and QuestFrame:IsShown() then
-        SetTinted(currentTint)
+        SetTinted(IsMarked(currentQuestID))
     end
 end
 
 local function Update()
     ns.rev = ns.rev + 1 -- a new quest was opened: redraw rather than trust cached geometry
-    local id = GetQuestID()
-    currentTint = id and id > 0 and not IsVanilla(id) or false
+    currentQuestID = GetQuestID() or 0
     Refresh()
     -- Blizzard may re-apply quest materials after the event fires.
     C_Timer.After(0, Refresh)
@@ -304,7 +314,7 @@ f:RegisterEvent("QUEST_GREETING")
 f:SetScript("OnEvent", function(_, event)
     if event == "QUEST_GREETING" then
         ns.rev = ns.rev + 1
-        currentTint = false
+        currentQuestID = 0
         Refresh()
     else
         Update()
@@ -358,7 +368,7 @@ end)
 local function RefreshLog()
     local details = QuestMapFrame and QuestMapFrame.DetailsFrame
     local id = details and details:IsShown() and details.questID
-    TintLogFrame(id and id > 0 and not IsVanilla(id) or false)
+    TintLogFrame(IsMarked(id))
 end
 
 local logHooked = false
@@ -379,12 +389,6 @@ local function HookLog()
     if QuestMapFrame_CloseQuestDetails then
         hooksecurefunc("QuestMapFrame_CloseQuestDetails", RefreshLog)
     end
-end
-
--- Marker (default: an infinity sign) in front of non-vanilla quest names in the quest log
--- list and the objective tracker.
-local function IsNonVanilla(questID)
-    return questID and questID > 0 and not IsVanilla(questID)
 end
 
 -- Dialogue UI (addon) replaces the quest window with DUIQuestFrame, which draws its own parchment
@@ -526,7 +530,7 @@ local function RefreshDUI()
     local frame = _G.DUIQuestFrame
     if not frame or not frame.Parchments then return end
     local id = frame.questLayout and frame.questID
-    if not frame:IsVisible() or not IsNonVanilla(id) then
+    if not frame:IsVisible() or not IsMarked(id) then
         if #duiOverlays > 0 or duiLogo then HideDUI() end
         return
     end
@@ -559,6 +563,114 @@ local function HookDUI()
     frame:HookScript("OnHide", function() RefreshDUI() end) -- hides the overlays
     frame:HookScript("OnSizeChanged", function() RefreshDUI() end)
     RefreshDUI()
+end
+
+-- Immersion (addon) shows quest text in ImmersionFrame.TalkBox, over a dark "talking head" box:
+-- BackgroundFrame.TextBackground, or SolidBackground when its solid background option is on.
+-- A tinted copy of that near-black art would stay black, so draw a flat teal glow instead, masked
+-- to the box's own shape. ImmersionFrame.lastEvent says what the box is showing; gossip is left alone.
+local IMM_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
+local IMM_SCALE = 0.75 -- brightness of the teal glow...
+local IMM_ALPHA = 0.6  -- ...and its strength relative to cfg.alpha (lower = subtler)
+local IMM_LOGO_SIZE = 30
+local IMM_LOGO_X, IMM_LOGO_Y = -24, -10 -- from the top-right corner of the box (negative = in, lower)
+local imm = {} -- glow texture, its mask, the logo, and the key the glow was last drawn for
+
+local function HideImmersion()
+    imm.key = nil
+    if imm.glow then imm.glow:Hide() end
+    if imm.logo then imm.logo:Hide() end
+end
+
+local function ApplyImmersionGlow(parent, bg)
+    local cfg = ns.cfg
+    local atlas, height = bg:GetAtlas(), bg:GetHeight()
+    if not height or height <= 0 then
+        imm.key = nil
+        if imm.glow then imm.glow:Hide() end
+        return
+    end
+    local key = ("%d:%s:%s:%.1f"):format(ns.rev, tostring(bg), tostring(atlas), height)
+    if imm.key == key and imm.glow:IsShown() then return end
+    imm.key = key
+    if not imm.glow then
+        imm.glow = parent:CreateTexture(nil, "BACKGROUND", nil, 2)
+        imm.mask = parent:CreateMaskTexture()
+        imm.glow:AddMaskTexture(imm.mask)
+    end
+    local glow, mask = imm.glow, imm.mask
+    mask:ClearAllPoints()
+    mask:SetAllPoints(bg)
+    if atlas then mask:SetAtlas(atlas) else mask:SetTexture(bg:GetTexture()) end
+    glow:ClearAllPoints()
+    glow:SetPoint("BOTTOMLEFT", bg, "BOTTOMLEFT")
+    glow:SetPoint("BOTTOMRIGHT", bg, "BOTTOMRIGHT")
+    glow:SetHeight(height * cfg.height)
+    local c = cfg.tint
+    glow:SetColorTexture(1, 1, 1, 1)
+    glow:SetBlendMode("ADD")
+    glow:SetGradient("VERTICAL",
+        CreateColor(c[1] * IMM_SCALE, c[2] * IMM_SCALE, c[3] * IMM_SCALE, cfg.alpha * IMM_ALPHA),
+        CreateColor(c[1] * IMM_SCALE, c[2] * IMM_SCALE, c[3] * IMM_SCALE, cfg.topAlpha * IMM_ALPHA))
+    glow:Show()
+end
+
+local function ApplyImmersionLogo(box, bg, show)
+    if not show then
+        if imm.logo then imm.logo:Hide() end
+        return
+    end
+    if not imm.logo then
+        imm.logo = CreateFrame("Frame", nil, box)
+        imm.logo:SetFrameLevel(math.min(box:GetFrameLevel() + 50, 9999))
+        imm.logo:SetSize(IMM_LOGO_SIZE, IMM_LOGO_SIZE)
+        imm.logo.texture = imm.logo:CreateTexture(nil, "OVERLAY")
+        imm.logo.texture:SetAllPoints()
+        imm.logo.texture:SetTexture(LOGO_PATH)
+    end
+    imm.logo:ClearAllPoints()
+    imm.logo:SetPoint("TOPRIGHT", bg, "TOPRIGHT", IMM_LOGO_X, IMM_LOGO_Y)
+    imm.logo:Show()
+end
+
+local function RefreshImmersion()
+    local frame = _G.ImmersionFrame
+    local box = frame and frame.TalkBox
+    local bgFrame = box and box.BackgroundFrame
+    if not bgFrame or not bgFrame.TextBackground then return end
+    if not (frame:IsVisible() and box:IsVisible() and IMM_EVENTS[frame.lastEvent] and IsMarked(GetQuestID())) then
+        if imm.glow or imm.logo then HideImmersion() end
+        return
+    end
+    local solid = bgFrame.SolidBackground
+    local bg = solid and solid:IsShown() and solid or bgFrame.TextBackground
+    if ns.cfg.showTint then
+        ApplyImmersionGlow(bgFrame, bg)
+    else
+        imm.key = nil
+        if imm.glow then imm.glow:Hide() end
+    end
+    ApplyImmersionLogo(box, bg, ns.cfg.showLogo)
+end
+
+-- Immersion switches between gossip and quest text without hiding the box, so refresh after each
+-- of its events (and once more on the next frame, after its own animations have set up).
+local immHooked = false
+local function HookImmersion()
+    local frame = _G.ImmersionFrame
+    if immHooked or not frame or not frame.TalkBox or not frame.HookScript then return end
+    immHooked = true
+    local function refreshSoon()
+        RefreshImmersion()
+        C_Timer.After(0, RefreshImmersion)
+    end
+    frame:HookScript("OnEvent", refreshSoon)
+    frame:HookScript("OnShow", refreshSoon)
+    frame:HookScript("OnHide", RefreshImmersion)
+    frame.TalkBox:HookScript("OnShow", refreshSoon)
+    frame.TalkBox:HookScript("OnHide", RefreshImmersion)
+    frame.TalkBox:HookScript("OnSizeChanged", RefreshImmersion)
+    RefreshImmersion()
 end
 
 local ICON_PATH = "Interface\\AddOns\\ForeverQuestTint\\Media\\Infinity.tga"
@@ -711,7 +823,7 @@ local function ColourLogObjectives()
     if not pool then return end
     for frame in pool:EnumerateActive() do
         if frame.Text then
-            SetObjectiveColour(frame.Text, ns.cfg.objectiveTint and IsNonVanilla(frame.questID) and true or false)
+            SetObjectiveColour(frame.Text, ns.cfg.objectiveTint and IsMarked(frame.questID) and true or false)
         end
     end
 end
@@ -720,7 +832,7 @@ local function RefreshLogList()
     if not QuestScrollFrame or not QuestScrollFrame.titleFramePool then return end
     for button in QuestScrollFrame.titleFramePool:EnumerateActive() do
         if button.Text then
-            ApplyMarker(button.Text, IsNonVanilla(button.questID))
+            ApplyMarker(button.Text, IsMarked(button.questID))
         end
     end
     ColourLogObjectives()
@@ -753,8 +865,8 @@ function BuildTitleMap()
         if title and not isHeader then
             -- A title shared with a vanilla quest counts as vanilla.
             if titleMap[title] == nil then
-                titleMap[title] = IsNonVanilla(questID) and true or false
-            elseif not IsNonVanilla(questID) then
+                titleMap[title] = IsMarked(questID) and true or false
+            elseif not IsMarked(questID) then
                 titleMap[title] = false
             end
         end
@@ -911,7 +1023,8 @@ local function HookMarkers()
         if root then
             if root.HookScript then root:HookScript("OnShow", QueueScan) end
             if type(root.Update) == "function" then hooksecurefunc(root, "Update", QueueScan) end
-            for _, module in pairs(root.MODULES or {}) do
+            -- Older clients list the modules in MODULES; Midnight's container keeps them in modules.
+            for _, module in pairs(root.MODULES or root.modules or {}) do
                 if type(module) == "table" then
                     for _, fn in ipairs({ "Update", "MarkDirty", "LayoutContents" }) do
                         if type(module[fn]) == "function" then hooksecurefunc(module, fn, QueueScan) end
@@ -952,28 +1065,91 @@ loader:SetScript("OnEvent", function(_, event, name)
         ForeverQuestTintDB = CopyDefaults(db, ns.defaults)
         ns.cfg = ForeverQuestTintDB
     end
+    if event == "PLAYER_LOGIN" and ns.cfg.preview ~= "auto" then
+        -- The preview is saved between sessions, so make sure it is never left on by accident.
+        print(("|cff99e6f2Forever Quest Tint:|r preview is forcing the tint %s for every quest. Type /fqt preview auto to go back to normal.")
+            :format(ns.cfg.preview == "on" and "ON" or "OFF"))
+    end
     HookLog()
     HookMarkers()
     HookDUI()
+    HookImmersion()
 end)
 HookLog()
 HookMarkers()
 HookDUI()
+HookImmersion()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
     ns.rev = ns.rev + 1
+    titleMap = nil -- which quests are marked may have changed (preview)
     Refresh()
     HookDUI()
     RefreshDUI()
+    HookImmersion()
+    RefreshImmersion()
     RefreshLog()
     RefreshLogList()
     RefreshTracker()
     QueueScan()
 end
 
+local PREVIEW_MODES = { "auto", "on", "off" }
+local PREVIEW_TEXT = {
+    auto = "auto (non-vanilla quests only)",
+    on = "ON for every quest",
+    off = "OFF for every quest",
+}
+ns.PREVIEW_MODES, ns.PREVIEW_TEXT = PREVIEW_MODES, PREVIEW_TEXT
+
+-- Testing aid: force the tint, logo and marker on (or off) for every quest, or go back to auto.
+-- With no mode it cycles auto -> on -> off.
+function ns.SetPreview(mode)
+    if mode and mode ~= "" and not PREVIEW_TEXT[mode] then
+        print("|cff99e6f2Forever Quest Tint:|r usage: /fqt preview [on | off | auto]")
+        return
+    end
+    if not PREVIEW_TEXT[mode] then
+        local cur = ns.cfg.preview
+        for i, m in ipairs(PREVIEW_MODES) do
+            if m == cur then mode = PREVIEW_MODES[i % #PREVIEW_MODES + 1] end
+        end
+        mode = mode or "auto"
+    end
+    ns.cfg.preview = mode
+    ns.Reapply()
+    if ns.SyncOptions then ns.SyncOptions() end
+    print("|cff99e6f2Forever Quest Tint:|r preview " .. PREVIEW_TEXT[mode])
+end
+
+local function Status()
+    local function loaded(name)
+        local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+        return isLoaded and isLoaded(name) and "loaded" or "not loaded"
+    end
+    local _, build, _, interface = GetBuildInfo()
+    print(("|cff99e6f2Forever Quest Tint|r %s on interface %s (build %s), preview %s"):format(
+        tostring(C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version")
+            or GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")),
+        tostring(interface), tostring(build), PREVIEW_TEXT[ns.cfg.preview] or tostring(ns.cfg.preview)))
+    print(("  Dialogue UI: %s (hooked %s)  Immersion: %s (hooked %s)  EllesmereUI Quest Tracker: %s"):format(
+        loaded("DialogueUI"), tostring(duiWatcher ~= nil), loaded("Immersion"), tostring(immHooked),
+        loaded("EllesmereUIQuestTracker")))
+end
+
 SLASH_FQT1 = "/fqt"
 SlashCmdList.FQT = function(msg)
+    msg = (msg or ""):lower():gsub("^%s+", ""):gsub("%s+$", "")
+    local cmd, arg = msg:match("^(%S+)%s*(.*)$")
+    if cmd == "preview" or cmd == "glow" then
+        ns.SetPreview(arg)
+        return
+    end
+    if msg == "status" then
+        Status()
+        return
+    end
     if msg == "logo" then
         local h = logBg and logos[logBg]
         if not h then print("Forever Quest Tint: no log logo frame yet (tick 'Add logo', open a non-vanilla quest in the log)"); return end
