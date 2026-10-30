@@ -21,6 +21,7 @@ ns.defaults = {
     objectiveTint = false,     -- recolour the objective lines of non-vanilla quests
     objectiveUseTint = true,   -- objectives use the tint colour...
     objectiveColor = { 0.60, 0.90, 0.95 }, -- ...or this colour
+    questieTint = true, -- recolour Questie's yellow ! and ? map icons for non-vanilla quests
     preview = "auto", -- testing aid: "auto" marks non-vanilla quests, "on" marks every quest, "off" none
 }
 
@@ -785,6 +786,80 @@ local function RefreshLorewalker()
     ApplyBadge("lorewalker", frame.TitleContainer, show and ns.cfg.showLogo, "RIGHT", "RIGHT", LW_LOGO_X, 0, LW_LOGO_SIZE)
 end
 
+-- Questie (addon): its quest icons on the world map and minimap. Each is a pooled frame named QuestieFrame<n>,
+-- holding its quest in data.Id. Questie colours an icon's texture through SetVertexColor, a wrapper of its own that
+-- remembers the colour it asked for in texture.r/g/b/a and reuses it when it fades icons. For a marked quest the
+-- yellow ! (available) and ? (ready to turn in) are desaturated and drawn in the tint colour; Questie's grey, blue,
+-- event and PvP icons keep their colours and meaning. When Questie asks for anything but plain white (its hover
+-- highlight), its colour wins. Questie's frames and modules are its internals, so each is checked before use.
+local QUESTIE_ICON_TYPES = { "ICON_TYPE_AVAILABLE", "ICON_TYPE_COMPLETE" }
+local QUESTIE_BRIGHTNESS = 1.25 -- the desaturated yellow is darker than the icon was; lift the tint back up
+local questieFrames = {}
+
+local function QuestieTintable(frame)
+    local path = frame.fqtIcon
+    if not path or type(Questie) ~= "table" or type(Questie.usedIcons) ~= "table" then return false end
+    for _, key in ipairs(QUESTIE_ICON_TYPES) do
+        if Questie[key] and Questie.usedIcons[Questie[key]] == path then return true end
+    end
+    return false
+end
+
+local function ApplyQuestieTint(frame)
+    local tex = frame.texture
+    if not tex or not tex.OLDSetVertexColor then return end
+    local plain = (tex.r or 1) == 1 and (tex.g or 1) == 1 and (tex.b or 1) == 1
+    local data = frame.data
+    if ns.cfg.questieTint and plain and data and IsMarked(data.Id) and QuestieTintable(frame) then
+        local c = ns.cfg.tint
+        tex:SetDesaturated(true)
+        tex:OLDSetVertexColor(math.min(1, c[1] * QUESTIE_BRIGHTNESS), math.min(1, c[2] * QUESTIE_BRIGHTNESS),
+            math.min(1, c[3] * QUESTIE_BRIGHTNESS), tex.a or 1)
+        frame.fqtTinted = true
+    elseif frame.fqtTinted then
+        frame.fqtTinted = nil
+        tex:SetDesaturated(false)
+        tex:OLDSetVertexColor(tex.r or 1, tex.g or 1, tex.b or 1, tex.a or 1)
+    end
+end
+
+local function HookQuestieFrame(frame)
+    if not frame or frame.fqtQuestieHooked or not frame.texture or type(frame.texture.SetVertexColor) ~= "function"
+        or type(frame.UpdateTexture) ~= "function" then return end
+    frame.fqtQuestieHooked = true
+    questieFrames[#questieFrames + 1] = frame
+    -- After Questie's own colouring, whether from a redraw, a fade or the end of a hover highlight.
+    hooksecurefunc(frame.texture, "SetVertexColor", function() ApplyQuestieTint(frame) end)
+    -- The icon file says which kind of icon it is; Questie can swap it (grey ! to yellow on a level up).
+    hooksecurefunc(frame, "UpdateTexture", function(_, path)
+        frame.fqtIcon = path
+        ApplyQuestieTint(frame)
+    end)
+    frame.fqtIcon = frame.texture:GetTexture()
+    ApplyQuestieTint(frame)
+end
+
+local questieHooked = false
+local function HookQuestie()
+    if questieHooked or type(QuestieLoader) ~= "table" or type(QuestieLoader._modules) ~= "table" then return end
+    local module = QuestieLoader._modules.QuestieFrame
+    if type(module) ~= "table" or type(module.CreateIconFrame) ~= "function" then return end
+    questieHooked = true
+    -- Questie's pool makes icon frames as it needs them: catch each new one, then any it already made.
+    hooksecurefunc(module, "CreateIconFrame", function(frameId)
+        HookQuestieFrame(_G["QuestieFrame" .. tostring(frameId)])
+    end)
+    local i = 1
+    while _G["QuestieFrame" .. i] do
+        HookQuestieFrame(_G["QuestieFrame" .. i])
+        i = i + 1
+    end
+end
+
+local function RefreshQuestie()
+    for _, frame in ipairs(questieFrames) do ApplyQuestieTint(frame) end
+end
+
 local lwHooked = false
 local function HookLorewalker()
     local frame = _G.LWDialogFrame
@@ -1302,6 +1377,7 @@ loader:SetScript("OnEvent", function(_, event, name)
     HookImmersion()
     HookLorewalker()
     HookCUIF()
+    HookQuestie()
 end)
 HookLog()
 HookMarkers()
@@ -1309,6 +1385,7 @@ HookDUI()
 HookImmersion()
 HookLorewalker()
 HookCUIF()
+HookQuestie()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
@@ -1322,6 +1399,8 @@ function ns.Reapply()
     HookLorewalker()
     RefreshLorewalker()
     HookCUIF()
+    HookQuestie()
+    RefreshQuestie()
     RefreshLog()
     RefreshLogList()
     RefreshTracker()
@@ -1372,6 +1451,8 @@ local function Status()
     print(("  ClassicUI Forever: %s (quest log %s, quest watch %s)  EllesmereUI Quest Tracker: %s"):format(
         loaded("ClassicUIForever"), cuifHooked.log and "hooked" or "not built yet",
         cuifHooked.watch and "hooked" or "not built yet", loaded("EllesmereUIQuestTracker")))
+    print(("  Questie: %s (map icons %s, %d hooked)"):format(loaded("Questie"),
+        questieHooked and "hooked" or "not hooked", #questieFrames))
 end
 
 SLASH_FQT1 = "/fqt"

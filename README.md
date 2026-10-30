@@ -20,6 +20,7 @@ Type `/fqt`, or open **Options → AddOns → Forever Quest Tint**.
 
 - **Tint the parchment teal**: on by default.
 - **Add the WoW Forever logo**: off by default. Puts the logo in the top-right corner of the bar above the quest text. Works with or without the tint.
+- **Tint Questie's ! and ? map icons**: on by default. With Questie installed, the yellow ! (quest available) and ? (ready to turn in) of non-vanilla quests are drawn in the tint colour on the world map and minimap.
 - **Tint colour**: the colour of the overlay.
 - **Bottom opacity**: strength of the teal at the bottom of the page.
 - **Top opacity**: strength where the fade ends. `0%` fades out completely.
@@ -54,6 +55,7 @@ Nothing to configure: the addon detects these on its own (`/fqt status` shows wh
 - **Immersion**: its talking-head box gets a teal glow that follows the box's shape, and the logo in its top-right corner, while it shows quest text. Gossip is left alone.
 - **Lorewalker**: in its Classic mode, the quest page gets a teal wash that follows the page's outline (a deeper glow on its Dark theme), and the logo on the title bar. Gossip is left alone. Its Immersive and Story modes have no page, so they are unchanged. Lorewalker gives quests it considers new to Forever a page of its own; the tint and logo follow this addon's list.
 - **ClassicUI Forever**: its quest log window gets the teal wash on the selected quest's page, and the quest name marker in its list. Its quest watch gets the marker too. On the map, the tint follows its parchment when its quest pane is on, and its dark themes get a teal glow instead of the copy of the paper. Its quest-giver window is the game's, so it is tinted as usual. Not covered yet: its combined map's quest pages, the logo in its quest log, and objective colours in its quest watch.
+- **Questie**: the yellow ! and ? of non-vanilla quests on the world map and minimap are drawn in the tint colour (option above). Questie's grey (low level), blue (repeatable), event and PvP icons keep their own colours, and its hover highlight still shows. Questie's quest data is built from Classic and doesn't yet cover most quests new to Forever, so many of them have no Questie icon to tint yet.
 - **EllesmereUI**: its Quest Tracker restyles Blizzard's objective tracker, so the quest name marker and objective colours work in it as usual. EllesmereUI shows quest names on a single line, so a long name can cut off a marker placed after it; if that happens, tick **Put the marker at the start of the name**.
 
 Using another quest or tracker addon? Open an issue with its name.
