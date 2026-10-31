@@ -578,23 +578,38 @@ end
 
 -- A flat teal wash over the bottom of a page whose art can't simply be copied (sliced art, or a window's art in
 -- pieces), like the Black contrast setting's glow above: brightness `scale` and strength `strength` (relative to
--- cfg.alpha). An optional mask (file and texture coordinates) trims it to the page's own outline. Drawn one
--- sublevel above `region` when it is a texture, else at the top of `parent`'s background layer.
+-- cfg.alpha). An optional mask (file and texture coordinates) trims it to the page's own outline. With `corner` (a
+-- radius), the bottom corners are rounded to match a panel's: the lowest `corner` units are drawn as narrower
+-- strips that follow the curve, each carrying its share of the same fade. Drawn one sublevel above `region` when it
+-- is a texture, else at the top of `parent`'s background layer.
+local CORNER_STEPS = 4
 local flats = {}
-local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoords)
+
+local function HideFlat(key)
     local ov = flats[key]
+    if not ov then return end
+    ov:Hide()
+    for _, step in ipairs(ov.fqtSteps) do step:Hide() end
+end
+
+local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoords, corner)
+    local cfg = ns.cfg
     local height = region and region:GetHeight()
-    if not height or height <= 0 then
-        if ov then ov:Hide() end
+    local fade = height and height * cfg.height
+    if not fade or fade <= 0 then
+        HideFlat(key)
         return
     end
+    local ov = flats[key]
     if not ov then
         ov = parent:CreateTexture(nil, "BACKGROUND", nil, 7)
+        ov.fqtSteps = {}
         flats[key] = ov
     end
+    local layer, sublevel = "BACKGROUND", 7
     if region.GetDrawLayer then
-        local layer, sublevel = region:GetDrawLayer()
-        ov:SetDrawLayer(layer, math.min((sublevel or 0) + 1, 7))
+        layer, sublevel = region:GetDrawLayer()
+        sublevel = math.min((sublevel or 0) + 1, 7)
     end
     if maskFile then
         if not ov.fqtMask then
@@ -606,21 +621,38 @@ local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoo
         ov.fqtMask:SetTexture(maskFile, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
         if maskCoords then ov.fqtMask:SetTexCoord(unpack(maskCoords)) end
     end
-    local cfg = ns.cfg
     local c = cfg.tint
-    ov:ClearAllPoints()
-    ov:SetPoint("BOTTOMLEFT", region, "BOTTOMLEFT")
-    ov:SetPoint("BOTTOMRIGHT", region, "BOTTOMRIGHT")
-    ov:SetHeight(height * cfg.height)
-    ov:SetColorTexture(1, 1, 1, 1)
-    ov:SetGradient("VERTICAL",
-        CreateColor(c[1] * scale, c[2] * scale, c[3] * scale, cfg.alpha * strength),
-        CreateColor(c[1] * scale, c[2] * scale, c[3] * scale, cfg.topAlpha * strength))
-    ov:Show()
-end
-
-local function HideFlat(key)
-    if flats[key] then flats[key]:Hide() end
+    local r, g, b = c[1] * scale, c[2] * scale, c[3] * scale
+    -- Opacity at y units above the bottom: cfg.alpha there, cfg.topAlpha where the fade ends.
+    local function alphaAt(y)
+        return (cfg.topAlpha + (cfg.alpha - cfg.topAlpha) * (1 - y / fade)) * strength
+    end
+    local function piece(tex, y0, y1, inset)
+        tex:SetDrawLayer(layer, sublevel)
+        tex:ClearAllPoints()
+        tex:SetPoint("BOTTOMLEFT", region, "BOTTOMLEFT", inset, y0)
+        tex:SetPoint("BOTTOMRIGHT", region, "BOTTOMRIGHT", -inset, y0)
+        tex:SetHeight(y1 - y0)
+        tex:SetColorTexture(1, 1, 1, 1)
+        tex:SetGradient("VERTICAL", CreateColor(r, g, b, alphaAt(y0)), CreateColor(r, g, b, alphaAt(y1)))
+        tex:Show()
+    end
+    local rounded = corner and corner > 0 and fade > corner
+    piece(ov, rounded and corner or 0, fade, 0)
+    for i = 1, CORNER_STEPS do
+        local step = ov.fqtSteps[i]
+        if rounded then
+            if not step then
+                step = parent:CreateTexture(nil, layer, nil, sublevel)
+                ov.fqtSteps[i] = step
+            end
+            local y0, y1 = (i - 1) * corner / CORNER_STEPS, i * corner / CORNER_STEPS
+            local dy = corner - (y0 + y1) / 2 -- distance below the curve's centre, at the strip's middle
+            piece(step, y0, y1, corner - math.sqrt(corner * corner - dy * dy))
+        elseif step then
+            step:Hide()
+        end
+    end
 end
 
 -- The logo as a small badge on `anchor`, created on first use and kept per key.
@@ -647,11 +679,12 @@ end
 
 -- Immersion (addon): quest text in ImmersionFrame.TalkBox (its "talking head"), with the quest's objectives and
 -- rewards in a dark panel below it, TalkBox.Elements: a backdrop with 16px edges that Immersion shows only for
--- quests and resizes to its contents. The glow goes in that panel, inside its edges so it follows the panel's
--- shape, and the logo in its top-right corner (the talking head's corner holds Immersion's own buttons).
+-- quests and resizes to its contents. The glow fills the panel's dark body, with its bottom corners rounded to the
+-- panel's, and the logo goes in its top-right corner (the talking head's corner holds Immersion's own buttons).
 -- ImmersionFrame.lastEvent says what is showing; gossip is left alone.
 local IMM_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
-local IMM_INSET = 14                     -- inside the panel's edge pieces
+local IMM_INSET = 4                      -- the panel's dark body reaches this close to its frame edge
+local IMM_CORNER = 8                     -- radius of the dark body's rounded corners
 local IMM_SCALE, IMM_ALPHA = 0.75, 0.6   -- a deeper teal glow on the dark panel
 local IMM_LOGO_SIZE = 24
 local IMM_LOGO_X, IMM_LOGO_Y = -18, -14  -- from the panel's top-right, level with its first heading
@@ -668,7 +701,7 @@ local function RefreshImmersion()
             immInner:SetPoint("TOPLEFT", IMM_INSET, -IMM_INSET)
             immInner:SetPoint("BOTTOMRIGHT", -IMM_INSET, IMM_INSET)
         end
-        ApplyFlat("immersion", panel, immInner, IMM_SCALE, IMM_ALPHA)
+        ApplyFlat("immersion", panel, immInner, IMM_SCALE, IMM_ALPHA, nil, nil, IMM_CORNER)
     else
         HideFlat("immersion")
     end
@@ -831,10 +864,11 @@ local function HookLorewalker()
 end
 
 -- Storyline (addon): quest text in a speech bubble (Storyline_NPCFrameChat) along the bottom of its scene, a dark
--- chat-bubble backdrop with 16px edges. The wash stays inside those edges, so it follows the bubble's shape; the
--- scene above is zone art and is left alone. Storyline_NPCFrameChat.event is what the bubble is showing.
+-- chat-bubble backdrop whose dark body reaches almost to its thin border. The glow fills that body, with its bottom
+-- corners rounded to the bubble's; the scene above is zone art and is left alone. Storyline_NPCFrameChat.event is what the bubble is showing.
 local SL_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
-local SL_INSET = 14                     -- inside the bubble's edge pieces
+local SL_INSET = 5                      -- just inside the bubble's thin border line
+local SL_CORNER = 8                     -- radius of the bubble's rounded corners
 local SL_SCALE, SL_ALPHA = 0.75, 0.6    -- a deeper teal glow on the dark bubble
 local SL_LOGO_SIZE = 24
 local SL_LOGO_X, SL_LOGO_Y = -16, -10   -- from the bubble's top-right, in the margin beside the NPC's name
@@ -850,7 +884,7 @@ local function RefreshStoryline()
             slInner:SetPoint("TOPLEFT", SL_INSET, -SL_INSET)
             slInner:SetPoint("BOTTOMRIGHT", -SL_INSET, SL_INSET)
         end
-        ApplyFlat("storyline", chat, slInner, SL_SCALE, SL_ALPHA)
+        ApplyFlat("storyline", chat, slInner, SL_SCALE, SL_ALPHA, nil, nil, SL_CORNER)
     else
         HideFlat("storyline")
     end

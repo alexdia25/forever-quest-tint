@@ -1,7 +1,15 @@
 local ADDON, ns = ...
 
-local panel = CreateFrame("Frame")
-panel.name = "Forever Quest Tint"
+-- The settings canvas scrolls: the options are laid out on `panel`, the scroll child, which is taller than the
+-- settings window. Its height follows the lowest option once laid out (see FitContent below).
+local canvas = CreateFrame("Frame")
+canvas.name = "Forever Quest Tint"
+local scroll = CreateFrame("ScrollFrame", nil, canvas, "UIPanelScrollFrameTemplate")
+scroll:SetPoint("TOPLEFT", 0, -4)
+scroll:SetPoint("BOTTOMRIGHT", -28, 4)
+local panel = CreateFrame("Frame", nil, scroll)
+panel:SetSize(640, 800)
+scroll:SetScrollChild(panel)
 
 local syncing = false
 local widgets = {}
@@ -326,19 +334,37 @@ end)
 
 panel:SetScript("OnShow", Sync)
 
+-- Width follows the window; height reaches the lowest option (both columns) plus a margin.
+local CONTENT_MARGIN = 20
+local function FitContent()
+    panel:SetWidth(math.max(1, scroll:GetWidth()))
+    local top = panel:GetTop()
+    local lowest
+    for _, region in ipairs({ reset, previewText }) do
+        local bottom = region:GetBottom()
+        if bottom and (not lowest or bottom < lowest) then lowest = bottom end
+    end
+    if top and lowest then panel:SetHeight(top - lowest + CONTENT_MARGIN) end
+end
+scroll:HookScript("OnSizeChanged", FitContent)
+canvas:HookScript("OnShow", function()
+    FitContent()
+    C_Timer.After(0, FitContent) -- once the window has laid the canvas out
+end)
+
 local category
 if Settings and Settings.RegisterCanvasLayoutCategory then
-    category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+    category = Settings.RegisterCanvasLayoutCategory(canvas, canvas.name)
     Settings.RegisterAddOnCategory(category)
 elseif InterfaceOptions_AddCategory then
-    InterfaceOptions_AddCategory(panel)
+    InterfaceOptions_AddCategory(canvas)
 end
 
 function ns.OpenOptions()
     if Settings and Settings.OpenToCategory and category then
         Settings.OpenToCategory(category:GetID())
     elseif InterfaceOptionsFrame_OpenToCategory then
-        InterfaceOptionsFrame_OpenToCategory(panel)
-        InterfaceOptionsFrame_OpenToCategory(panel)
+        InterfaceOptionsFrame_OpenToCategory(canvas)
+        InterfaceOptionsFrame_OpenToCategory(canvas)
     end
 end
