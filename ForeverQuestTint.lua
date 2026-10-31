@@ -939,7 +939,7 @@ end
 -- Questie (addon): its quest icons on the world map and minimap. Each is a pooled frame named QuestieFrame<n>,
 -- holding its quest in data.Id. Questie colours an icon's texture through SetVertexColor, a wrapper of its own that
 -- remembers the colour it asked for in texture.r/g/b/a and reuses it when it fades icons. For a marked quest the
--- yellow ! (available) and ? (ready to turn in) are desaturated and drawn in the tint colour; Questie's grey, blue,
+-- yellow ! (available) and ? (ready to turn in) are desaturated and drawn in the vivid tint; Questie's grey, blue,
 -- event and PvP icons keep their colours and meaning. When Questie asks for anything but plain white (its hover
 -- highlight), its colour wins. Questie's frames and modules are its internals, so each is checked before use.
 local QUESTIE_ICON_TYPES = { "ICON_TYPE_AVAILABLE", "ICON_TYPE_COMPLETE" }
@@ -961,7 +961,8 @@ local function ApplyQuestieTint(frame)
     local plain = (tex.r or 1) == 1 and (tex.g or 1) == 1 and (tex.b or 1) == 1
     local data = frame.data
     if ns.cfg.questieTint and plain and data and IsMarked(data.Id) and QuestieTintable(frame) then
-        local c = ns.cfg.tint
+        -- The vivid tint: the plain one, desaturated, came out a pale grey-cyan close to the map's own colours.
+        local c = VividTint(ns.cfg.tint)
         tex:SetDesaturated(true)
         tex:OLDSetVertexColor(math.min(1, c[1] * QUESTIE_BRIGHTNESS), math.min(1, c[2] * QUESTIE_BRIGHTNESS),
             math.min(1, c[3] * QUESTIE_BRIGHTNESS), tex.a or 1)
@@ -1615,6 +1616,41 @@ local function HookCUIF()
     RefreshCUIFLog()
 end
 
+-- Questie's own quest tracker (in place of the game's): a pool of lines, linePool1..250, each with a label and, on
+-- a quest title line, mode "quest" and its quest in line.Quest, set before the title is written. The marker goes on
+-- as Questie writes the title, so its measuring right after already includes it. Objective lines and zone headers
+-- are left alone. The lines are Questie's internals, so each is checked before use.
+local questieLines = {}
+
+local function MarkQuestieLine(line)
+    local quest = line.mode == "quest" and type(line.Quest) == "table" and line.Quest
+    local label = line.label
+    if not label then return end
+    label.fqtRemarking = true
+    ApplyMarker(label, quest and IsMarked(quest.Id) or false)
+    label.fqtRemarking = nil
+end
+
+local function HookQuestieTracker()
+    if #questieLines > 0 or type(QuestieLoader) ~= "table" then return end
+    local i = 1
+    while true do
+        local line = _G["linePool" .. i]
+        if not (line and line.label and type(line.SetQuest) == "function" and line.expandQuest) then break end
+        questieLines[i] = line
+        hooksecurefunc(line.label, "SetText", function(label)
+            if not label.fqtRemarking then MarkQuestieLine(line) end
+        end)
+        i = i + 1
+    end
+end
+
+local function RefreshQuestieTracker()
+    for _, line in ipairs(questieLines) do
+        if line:IsShown() then MarkQuestieLine(line) end
+    end
+end
+
 local listHooked, trackerHooked, eventsHooked = false, false, false
 local function HookMarkers()
     -- Each hook installs independently, so a missing function in one doesn't block the other.
@@ -1653,6 +1689,7 @@ local function HookMarkers()
         ev:SetScript("OnEvent", function(_, event)
             if event ~= "PLAYER_ENTERING_WORLD" then titleMap = nil end
             HookCUIF() -- its windows are built on first use
+            HookQuestieTracker() -- built once Questie is ready
             QueueScan()
         end)
         QueueScan()
@@ -1691,6 +1728,7 @@ loader:SetScript("OnEvent", function(_, event, name)
     HookLorewalker()
     HookCUIF()
     HookQuestie()
+    HookQuestieTracker()
     HookStoryline()
 end)
 HookLog()
@@ -1716,6 +1754,8 @@ function ns.Reapply()
     HookCUIF()
     HookQuestie()
     RefreshQuestie()
+    HookQuestieTracker()
+    RefreshQuestieTracker()
     HookStoryline()
     RefreshStoryline()
     RefreshLog()
@@ -1770,6 +1810,7 @@ local function Status()
         cuifHooked.watch and "hooked" or "not built yet", loaded("EllesmereUIQuestTracker")))
     print(("  Questie: %s (map icons %s, %d hooked)  Storyline: %s (hooked %s)"):format(loaded("Questie"),
         questieHooked and "hooked" or "not hooked", #questieFrames, loaded("Storyline"), tostring(slHooked)))
+    print(("  Questie tracker: %s"):format(#questieLines > 0 and (#questieLines .. " lines hooked") or "not hooked"))
 end
 
 SLASH_FQT1 = "/fqt"
