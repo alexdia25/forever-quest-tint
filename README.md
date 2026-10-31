@@ -20,7 +20,7 @@ Type `/fqt`, or open **Options → AddOns → Forever Quest Tint**.
 
 - **Tint the parchment teal**: on by default.
 - **Add the WoW Forever logo**: off by default. Puts the logo in the top-right corner of the bar above the quest text. Works with or without the tint.
-- **Tint Questie's ! and ? map icons**: on by default. With Questie installed, the yellow ! (quest available) and ? (ready to turn in) of non-vanilla quests are drawn in the tint colour on the world map and minimap.
+- **Tint Questie's ! and ? map icons**: on by default. With Questie installed, the yellow ! (quest available) and ? (ready to turn in) of non-vanilla quests get a teal gradient rising from the bottom, on the world map and minimap.
 - **Tint colour**: the colour of the overlay.
 - **Bottom opacity**: strength of the teal at the bottom of the page.
 - **Top opacity**: strength where the fade ends. `0%` fades out completely.
