@@ -965,7 +965,9 @@ local function ApplyQuestieTint(frame)
     local plain = (tex.r or 1) == 1 and (tex.g or 1) == 1 and (tex.b or 1) == 1
     local data = frame.data
     local solid, fade = frame.fqtSolid, frame.fqtFade
-    local height = tex:GetHeight()
+    -- The frame's own size (Questie sets it with SetSize): the texture takes its size from the frame's position, which
+    -- isn't known yet when Questie colours an icon before placing it on the map.
+    local height = frame:GetHeight()
     if ns.cfg.questieTint and plain and data and IsMarked(data.Id) and QuestieTintable(frame) and height and height > 0 then
         if not solid then
             -- Above Questie's icon (OVERLAY 0), level with its starter overlay, which is drawn outside the icon's shape.
@@ -1011,6 +1013,8 @@ local function HookQuestieFrame(frame)
         frame.fqtIcon = path
         ApplyQuestieTint(frame)
     end)
+    -- Questie sizes the icon after colouring it, and again when its scale options change.
+    if frame.HookScript then frame:HookScript("OnSizeChanged", function() ApplyQuestieTint(frame) end) end
     frame.fqtIcon = frame.texture:GetTexture()
     ApplyQuestieTint(frame)
 end
