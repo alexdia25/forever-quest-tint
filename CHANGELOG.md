@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.1
+- Lower CPU use. Questie's minimap icons, which Questie fades up to ten times a second as you move, now only update the strength of their teal gradient instead of redrawing it, with no temporary tables. The flat teal glow (EllesmereUI's quest log and the other glowing panels) is no longer redrawn twenty times a second while nothing about it changes.
+
 ## 0.7.0
 - Works with the Immersion addon: its Quest Objectives and Rewards panel gets a teal glow, and the optional logo in the panel's corner.
 - Works with Storyline: its speech bubble gets a teal glow while it shows quest text, and the optional logo in the bubble's corner.

@@ -86,7 +86,10 @@ local function FireGameEvent(event, ...)
         if f.events and f.events[event] then f:Fire("OnEvent", event, ...) end
     end
 end
-function CreateColor(r, g, b, a) return { r = r, g = g, b = b, a = a } end
+-- As the game's ColorMixin: fields r, g, b, a and SetRGBA.
+local ColorMixin = { SetRGBA = function(self, r, g, b, a) self.r, self.g, self.b, self.a = r, g, b, a end }
+ColorMixin.__index = ColorMixin
+function CreateColor(r, g, b, a) return setmetatable({ r = r, g = g, b = b, a = a }, ColorMixin) end
 local timers = {}
 C_Timer = { After = function(_, fn) table.insert(timers, fn) end }
 local function RunTimers() local t = timers; timers = {}; for _, fn in ipairs(t) do fn() end end
@@ -488,6 +491,12 @@ local mini = icon(999999, 6, true)
 check(isTint(mini, 0), "Questie: minimap icon's gradient at Questie's starting alpha")
 mini.texture:SetVertexColor(mini.texture.r, mini.texture.g, mini.texture.b, 0.4)
 check(isTint(mini, 0.4), "Questie: fading takes the gradient with it")
+-- Fading redraws only the strength: a full redraw would set the copy's texture again.
+mini.fqtSolid.file = "untouched"
+mini.texture:SetVertexColor(mini.texture.r, mini.texture.g, mini.texture.b, 0.7)
+check(mini.fqtSolid.file == "untouched" and math.abs(mini.fqtSolid.gradient[1].a - 0.7) < 0.001
+    and math.abs(mini.fqtFade.gradient[2].a) < 0.001, "Questie: a fade updates only the gradient's strength")
+mini.fqtSolid.file = mini.fqtIcon
 -- Hover highlight: Questie's colour shows, then the gradient comes back.
 avail.texture:SetVertexColor(0.6, 1, 1, 1)
 check(not tinted(avail) and vc(avail)[1] == 0.6, "Questie: hover highlight shows Questie's colour")
@@ -600,6 +609,18 @@ local lreg = logFlat and logFlat.points[1][2]
 check(logFlat and lreg.points[1][2] == det.Bg and lreg.points[2][1] == "BOTTOMRIGHT" and lreg.points[2][5] == 160,
     "skin: quest log glow stops at the Rewards panel's top")
 check(lreg.points[2][4] == -1, "skin: quest log glow's right edge lines up with the Rewards panel's")
+-- The quest log's keeper runs 20 times a second; with nothing changed, the glow is left as it is.
+local keeperFrame
+for _, f in ipairs(allFrames) do if f.scripts.OnUpdate and f.shown and not f.parent then keeperFrame = f end end
+logFlat.gradient = "untouched"
+local pointsBefore = lreg.points
+if keeperFrame then keeperFrame:Fire("OnUpdate", 0.06) end
+check(keeperFrame and logFlat.gradient == "untouched" and lreg.points == pointsBefore,
+    "skin: an unchanged quest log is not redrawn on every keeper tick")
+-- The Rewards panel moves: the glow's area is re-anchored and (in game) resizes with it, so the glow is redrawn.
+rw.t = 170; lreg.h = lreg.h - 10; keeperFrame:Fire("OnUpdate", 0.06)
+check(lreg.points[2][5] == 170 and logFlat.gradient ~= "untouched", "skin: a change (Rewards panel moved) still redraws")
+rw.t = 160; lreg.h = lreg.h + 10; keeperFrame:Fire("OnUpdate", 0.06)
 rw:Hide(); ns.Reapply()
 check(lreg.points[2][4] == -1 and lreg.points[2][5] == 0, "skin: still lined up with the panel when it's hidden, full height")
 skinLoaded = false
