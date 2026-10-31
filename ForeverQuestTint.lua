@@ -191,9 +191,24 @@ local function IsSkinned(tex)
 end
 
 -- What the flat glow covers for a skinned parchment: the quest window's text area widened to the window's sides
--- (the skin may resize the window, not the parchment), else the parchment's own rectangle.
+-- (the skin may resize the window, not the parchment), else the parchment's own rectangle, ending at the top of the
+-- quest log's Rewards panel when it shows (running underneath, the glow peeked out beside the narrower panel).
 local function SkinRegion(tex)
     local parent = tex:GetParent()
+    local rewards = parent and parent.RewardsFrameContainer
+    local rewardsTop = type(rewards) == "table" and rewards.IsShown and rewards:IsShown() and rewards:GetTop()
+    local texTop, texBottom = tex:GetTop(), tex:GetBottom()
+    if rewardsTop and texTop and texBottom and rewardsTop > texBottom and rewardsTop < texTop then
+        local region = skinRegions[tex]
+        if not region then
+            region = CreateFrame("Frame", nil, parent)
+            skinRegions[tex] = region
+        end
+        region:ClearAllPoints()
+        region:SetPoint("TOPLEFT", tex, "TOPLEFT")
+        region:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, rewardsTop - texBottom)
+        return region
+    end
     local scroll = parent and parent.GetName and _G[SKIN_SCROLL[parent:GetName() or ""] or ""]
     local sl, sr, wl, wr = scroll and scroll:GetLeft(), scroll and scroll:GetRight(), QuestFrame and QuestFrame:GetLeft(),
         QuestFrame and QuestFrame:GetRight()
