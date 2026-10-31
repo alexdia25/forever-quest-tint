@@ -6,3 +6,5 @@ ignore:
   - .pkgmeta
   - ForeverQuestTint_Mainline.toc
   - ForeverQuestTint_TBC.toc
+  - tests
+  - HANDOVER.md

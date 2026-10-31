@@ -81,7 +81,11 @@ Two dev TOCs let a copy of this folder load elsewhere for testing, together with
 - `ForeverQuestTint_Mainline.toc`: retail (Midnight), for the quest window, quest log and tracker addons.
 - `ForeverQuestTint_TBC.toc`: Burning Crusade Anniversary, for the Questie map icon tint. Questie has full TBC data and every TBC quest counts as non-vanilla, so there are plenty of icons to check. TBC's quest log is the old one, so the quest log tint doesn't apply there.
 
+TBC's world map has the game's own quest pins switched off, so the non-Questie map icon tint can only be tested on retail (or Forever).
+
 Both are left out of release packages, so releases load on Forever only. When you change `ForeverQuestTint.toc`, make the same change below the interface line in each dev TOC.
+
+`tests/harness.lua` loads the addon against stubbed WoW frames and checks each integration (`lua5.1 tests/harness.lua .`, from the repo root). It checks behaviour, not looks, so changes still need an in-game look. `logo/make_glow_corner.py` renders the glow corner art in `Media/`.
 
 ## Licence
 
