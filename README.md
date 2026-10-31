@@ -68,7 +68,12 @@ For World of Warcraft: Forever only (interface `16001`). It relies on Blizzard's
 
 ## Development
 
-`ForeverQuestTint_Mainline.toc` lets a copy of this folder load on retail (Midnight) for testing, together with `/fqt preview`. It is left out of release packages, so releases load on Forever only. When you change `ForeverQuestTint.toc`, make the same change below the interface line in the dev TOC.
+Two dev TOCs let a copy of this folder load elsewhere for testing, together with `/fqt preview`:
+
+- `ForeverQuestTint_Mainline.toc`: retail (Midnight), for the quest window, quest log and tracker addons.
+- `ForeverQuestTint_TBC.toc`: Burning Crusade Anniversary, for the Questie map icon tint. Questie has full TBC data and every TBC quest counts as non-vanilla, so there are plenty of icons to check. TBC's quest log is the old one, so the quest log tint doesn't apply there.
+
+Both are left out of release packages, so releases load on Forever only. When you change `ForeverQuestTint.toc`, make the same change below the interface line in each dev TOC.
 
 ## Licence
 
