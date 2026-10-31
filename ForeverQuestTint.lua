@@ -1389,7 +1389,8 @@ end
 -- Its quest log page is part of the window's art (two textures side by side in the double pane, four in the single),
 -- so, as with the game's own parchment, the tint is a desaturated, tinted copy of that art: of the part of each art
 -- texture under the bottom of the page: the detail pane, widened to the page's burnt edges (measured from its art,
--- per layout). It follows the paper right to its burnt, torn edges, in the vivid tint. A page one of its dark themes has inked gets the soft glow instead,
+-- per layout). It follows the paper right to its burnt, torn edges, in the plain tint, matching the game's own
+-- quest window and log on the same parchment. A page one of its dark themes has inked gets the soft glow instead,
 -- since a copy of a dark page stays dark.
 local CUIF_DARK_SCALE, CUIF_DARK_ALPHA = 0.75, 0.6 -- the glow on a dark page
 local CUIF_INSET = 8                              -- the glow's outer edge, inside the page's burnt edges
@@ -1422,7 +1423,7 @@ local function ApplyCUIFCopies(frame, detail)
         HideCUIFCopies()
         return false
     end
-    local c = VividTint(cfg.tint)
+    local c = cfg.tint
     local function alphaAt(y)
         return cfg.topAlpha + (cfg.alpha - cfg.topAlpha) * (1 - (y - bottom) / (fadeTop - bottom))
     end
