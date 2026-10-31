@@ -584,13 +584,16 @@ end
 -- cover them goes on BORDER too. With `vivid`, the tint is pushed away from grey first (VividTint), for dark panels
 -- where the plain tint reads as grey.
 --
--- With `corner` (a radius), the glow takes a panel's shape: rounded bottom corners and a soft rim. A texture's
--- gradient runs one way only, so it is built from thin horizontal bands, each carrying its share of the vertical
--- fade: 1 unit high across the corners so the curve is smooth, taller above. Each band ends in a short sideways
--- fade, and a strip under the lowest band fades downwards, so the glow melts into the panel's own soft edge.
-local CORNER_BAND = 1 -- band height across the rounded corners
-local BAND = 6        -- band height above them
-local FEATHER = 3     -- width of the soft rim, outside the shape's edge
+-- With `corner`, the glow takes a panel's shape: rounded bottom corners and a soft rim, from Media/GlowCorner.tga
+-- (logo/make_glow_corner.py), the bottom-left of a soft-edged rounded rectangle. `corner` is the size its 32x32
+-- corner quadrant is drawn at; in that size the rim is 10/32 of it and the corner's radius 22/32. `region` is the
+-- glow's outer edge, where the rim has faded out. Six pieces, each carrying its share of the vertical fade: the two
+-- bottom corners, the bottom edge between them and the two sides above them (stretched from the straight parts of
+-- the art), and the plain centre.
+local GLOW_CORNER = "Interface\\AddOns\\ForeverQuestTint\\Media\\GlowCorner.tga"
+local GLOW_CORNER_UV = { 0, 0.5, 0.5, 1 }               -- the bottom-left 32x32 quadrant
+local GLOW_BOTTOM_UV = { 0.74, 0.76, 0.5, 1 }           -- a column through the straight bottom edge
+local GLOW_SIDE_UV = { 0, 0.5, 0.23, 0.25 }             -- a row through the straight left edge
 local flats = {}
 
 local function HideFlat(key)
@@ -656,48 +659,43 @@ local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoo
     end
 
     ov:Hide()
-    local used = 0
-    local function nextPiece()
-        used = used + 1
-        local tex = ov.fqtPieces[used]
+    local width = region:GetWidth() or 0
+    local size = math.min(corner, fade, width / 2)
+    local function art(i, uv, mirror, left, right, y0, y1)
+        local tex = ov.fqtPieces[i]
         if not tex then
             tex = parent:CreateTexture(nil, layer, nil, sublevel)
-            ov.fqtPieces[used] = tex
+            ov.fqtPieces[i] = tex
         end
-        return tex
-    end
-    -- How far in from the side the shape's edge is, at y units above the bottom.
-    local function insetAt(y)
-        if y >= corner then return 0 end
-        local dy = corner - y
-        return corner - math.sqrt(math.max(0, corner * corner - dy * dy))
-    end
-    local width = region:GetWidth() or 0
-    local y = 0
-    while y < fade do
-        local y1 = math.min(fade, y + (y < corner and CORNER_BAND or BAND))
-        local inset = insetAt((y + y1) / 2)
-        local aLow, aHigh = alphaAt(y), alphaAt(y1)
-        local aMid = (aLow + aHigh) / 2
-        if width - 2 * inset > 0 then
-            local core = nextPiece()
-            place(core, inset, inset, y, y1)
-            core:SetGradient("VERTICAL", colour(aLow), colour(aHigh))
-            -- The soft rim either side: transparent outside, the band's strength inside.
-            local left, right = nextPiece(), nextPiece()
-            place(left, inset - FEATHER, width - inset, y, y1)
-            left:SetGradient("HORIZONTAL", colour(0), colour(aMid))
-            place(right, width - inset, inset - FEATHER, y, y1)
-            right:SetGradient("HORIZONTAL", colour(aMid), colour(0))
+        tex:SetDrawLayer(layer, sublevel)
+        tex:ClearAllPoints()
+        tex:SetPoint("BOTTOMLEFT", region, "BOTTOMLEFT", left, y0)
+        tex:SetPoint("BOTTOMRIGHT", region, "BOTTOMRIGHT", -right, y0)
+        tex:SetHeight(y1 - y0)
+        if uv then
+            tex:SetTexture(GLOW_CORNER)
+            if mirror then
+                tex:SetTexCoord(uv[2], uv[1], uv[3], uv[4])
+            else
+                tex:SetTexCoord(uv[1], uv[2], uv[3], uv[4])
+            end
+        else
+            tex:SetColorTexture(1, 1, 1, 1)
         end
-        y = y1
+        tex:SetGradient("VERTICAL", colour(alphaAt(y0)), colour(alphaAt(y1)))
+        tex:Show()
     end
-    -- Under the lowest band, fading downwards out of the bottom edge.
-    local bottomInset = insetAt(CORNER_BAND / 2)
-    local under = nextPiece()
-    place(under, bottomInset, bottomInset, -FEATHER, 0)
-    under:SetGradient("VERTICAL", colour(0), colour(alphaAt(0)))
-    for i = used + 1, #ov.fqtPieces do ov.fqtPieces[i]:Hide() end
+    local mid = width - 2 * size
+    art(1, GLOW_CORNER_UV, false, 0, width - size, 0, size)        -- bottom-left corner
+    art(2, GLOW_CORNER_UV, true, width - size, 0, 0, size)         -- bottom-right corner
+    art(3, GLOW_BOTTOM_UV, false, size, size, 0, size)             -- bottom edge
+    art(4, GLOW_SIDE_UV, false, 0, width - size, size, fade)       -- left side
+    art(5, GLOW_SIDE_UV, true, width - size, 0, size, fade)        -- right side
+    art(6, nil, false, size, size, size, fade)                     -- centre
+    -- A panel too narrow for a middle has nothing between its corners.
+    if mid <= 0 then ov.fqtPieces[3]:Hide(); ov.fqtPieces[6]:Hide() end
+    if fade <= size then ov.fqtPieces[4]:Hide(); ov.fqtPieces[5]:Hide(); ov.fqtPieces[6]:Hide() end
+    for i = 7, #ov.fqtPieces do ov.fqtPieces[i]:Hide() end
 end
 
 -- The logo as a small badge on `anchor`, created on first use and kept per key.
@@ -730,8 +728,8 @@ end
 -- corner holds Immersion's own buttons).
 -- ImmersionFrame.lastEvent says what is showing; gossip is left alone.
 local IMM_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
-local IMM_INSET = 8                      -- where the panel's dark body starts, inside its frame edge
-local IMM_CORNER = 10                    -- radius of the dark body's rounded corners
+local IMM_INSET = 4                      -- the glow's outer edge: its soft rim fades out just outside the dark body
+local IMM_CORNER = 12                    -- corner piece size: radius ~8 (the panel's corners), rim ~4
 local IMM_SCALE, IMM_ALPHA = 0.75, 0.6   -- a deeper glow on the dark panel, in a vivid version of the tint
 local IMM_LOGO_SIZE = 24
 local IMM_LOGO_X, IMM_LOGO_Y = -18, -14  -- from the panel's top-right, level with its first heading
@@ -915,8 +913,8 @@ end
 -- bottom corners rounded to the bubble's, drawn above the backdrop's dark edge pieces so it reaches the rim; the
 -- scene above is zone art and is left alone. Storyline_NPCFrameChat.event is what the bubble is showing.
 local SL_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
-local SL_INSET = 4                      -- the soft rim (FEATHER) then ends just inside the bubble's border line
-local SL_CORNER = 8                     -- radius of the bubble's rounded corners
+local SL_INSET = 2                      -- the glow's outer edge, just inside the bubble's border line
+local SL_CORNER = 6                     -- corner piece size: radius ~4 (the bubble's tight corners), rim ~2
 local SL_SCALE, SL_ALPHA = 0.75, 0.6    -- a deeper glow on the dark bubble, in a vivid version of the tint
 local SL_LOGO_SIZE = 24
 local SL_LOGO_X, SL_LOGO_Y = -16, -10   -- from the bubble's top-right, in the margin beside the NPC's name
