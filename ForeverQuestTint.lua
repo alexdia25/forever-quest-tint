@@ -1386,11 +1386,77 @@ end
 -- through its public API (ClassicUIForeverAPI.GetFrame). The parts used below (the log's detail pane and list area)
 -- are its internals, so each is checked before use. Its quest-giver window is the game's and its map pane's parchment
 -- is handled in TintLogFrame, so the tint above covers those already.
--- On its quest log page (the window's art; the detail pane covers almost exactly the parchment) the glow is the soft
--- rounded one, inset so it fades out before the page's burnt, torn edges.
-local CUIF_SCALE, CUIF_ALPHA = 1, 0.55 -- a vivid tint, a little over half strength
-local CUIF_INSET = 8                   -- the glow's outer edge, inside the page's burnt edges
-local CUIF_CORNER = 16                 -- corner piece size: radius ~11, rim ~5, for the torn corners
+-- Its quest log page is part of the window's art (two textures side by side in the double pane, four in the single),
+-- so, as with the game's own parchment, the tint is a desaturated, tinted copy of that art: of the part of each art
+-- texture under the bottom of the detail pane, which covers almost exactly the parchment. It follows the paper right
+-- to its burnt, torn edges, in the vivid tint. A page one of its dark themes has inked gets the soft glow instead,
+-- since a copy of a dark page stays dark.
+local CUIF_DARK_SCALE, CUIF_DARK_ALPHA = 0.75, 0.6 -- the glow on a dark page
+local CUIF_INSET = 8                              -- the glow's outer edge, inside the page's burnt edges
+local CUIF_CORNER = 16                            -- glow corner piece size: radius ~11, rim ~5
+local cuifCopies = {} -- copy textures, in use order
+local cuifOwn = {}    -- this addon's textures on the window, never copied themselves
+
+local function HideCUIFCopies()
+    for _, copy in ipairs(cuifCopies) do copy:Hide() end
+end
+
+-- Returns false when there was nothing to copy, or the page is dark.
+local function ApplyCUIFCopies(frame, detail)
+    local left, right, bottom, top = detail:GetLeft(), detail:GetRight(), detail:GetBottom(), detail:GetTop()
+    if not (left and right and bottom and top) or right <= left or top <= bottom then
+        HideCUIFCopies()
+        return false
+    end
+    local cfg = ns.cfg
+    local fadeTop = bottom + (top - bottom) * cfg.height
+    if fadeTop <= bottom then
+        HideCUIFCopies()
+        return false
+    end
+    local c = VividTint(cfg.tint)
+    local function alphaAt(y)
+        return cfg.topAlpha + (cfg.alpha - cfg.topAlpha) * (1 - (y - bottom) / (fadeTop - bottom))
+    end
+    local used, dark = 0, false
+    for _, art in ipairs({ frame:GetRegions() }) do
+        if not cuifOwn[art] and art.GetTexture and art:IsShown() and art:GetDrawLayer() == "BACKGROUND" then
+            local file = art:GetTexture()
+            local L, R, B, T = art:GetLeft(), art:GetRight(), art:GetBottom(), art:GetTop()
+            local x0, x1 = L and math.max(L, left), R and math.min(R, right)
+            local y0, y1 = B and math.max(B, bottom), T and math.min(T, fadeTop)
+            if file and L and R > L and T > B and x1 > x0 and y1 > y0 then
+                if IsInkedDark(art) then dark = true end
+                used = used + 1
+                local copy = cuifCopies[used]
+                if not copy then
+                    copy = frame:CreateTexture(nil, "BACKGROUND", nil, 7)
+                    cuifCopies[used] = copy
+                    cuifOwn[copy] = true
+                end
+                -- The matching slice of the art's own texture coordinates.
+                local ulx, uly, _, _, _, _, lrx, lry = art:GetTexCoord()
+                local function u(x) return ulx + (lrx - ulx) * (x - L) / (R - L) end
+                local function v(y) return uly + (lry - uly) * (T - y) / (T - B) end
+                copy:ClearAllPoints()
+                copy:SetPoint("BOTTOMLEFT", art, "BOTTOMLEFT", x0 - L, y0 - B)
+                copy:SetSize(x1 - x0, y1 - y0)
+                copy:SetTexture(file)
+                copy:SetTexCoord(u(x0), u(x1), v(y1), v(y0))
+                copy:SetDesaturated(true)
+                copy:SetGradient("VERTICAL", CreateColor(c[1], c[2], c[3], alphaAt(y0)),
+                    CreateColor(c[1], c[2], c[3], alphaAt(y1)))
+                copy:Show()
+            end
+        end
+    end
+    for i = used + 1, #cuifCopies do cuifCopies[i]:Hide() end
+    if dark then
+        HideCUIFCopies()
+        return false
+    end
+    return used > 0
+end
 
 local function CUIFFrame(name)
     local api = _G.ClassicUIForeverAPI
@@ -1407,13 +1473,20 @@ local function RefreshCUIFLog()
     if not detail then return end
     local id = C_QuestLog and C_QuestLog.GetSelectedQuest and C_QuestLog.GetSelectedQuest()
     if ns.cfg.showTint and frame:IsVisible() and detail:IsShown() and IsMarked(id) then
+        if ApplyCUIFCopies(frame, detail) then
+            HideFlat("cuifLog")
+            return
+        end
         if not frame.fqtInner then
             frame.fqtInner = CreateFrame("Frame", nil, frame)
             frame.fqtInner:SetPoint("TOPLEFT", detail, "TOPLEFT", CUIF_INSET, -CUIF_INSET)
             frame.fqtInner:SetPoint("BOTTOMRIGHT", detail, "BOTTOMRIGHT", -CUIF_INSET, CUIF_INSET)
         end
-        ApplyFlat("cuifLog", frame, frame.fqtInner, CUIF_SCALE, CUIF_ALPHA, CUIF_CORNER, "BACKGROUND", true)
+        ApplyFlat("cuifLog", frame, frame.fqtInner, CUIF_DARK_SCALE, CUIF_DARK_ALPHA, CUIF_CORNER, "BACKGROUND", true)
+        for _, tex in ipairs(flats.cuifLog.fqtPieces) do cuifOwn[tex] = true end
+        cuifOwn[flats.cuifLog] = true
     else
+        HideCUIFCopies()
         HideFlat("cuifLog")
     end
 end

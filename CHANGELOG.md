@@ -3,9 +3,9 @@
 ## 0.7.0
 - Works with the Immersion addon: its Quest Objectives and Rewards panel gets a teal glow, and the optional logo in the panel's corner.
 - Works with Storyline: its speech bubble gets a teal glow while it shows quest text, and the optional logo in the bubble's corner.
-- The Immersion, Storyline, Lorewalker and ClassicUI Forever quest log glows have soft rounded corners and a soft edge that follows their panel or page, in a more vivid version of your tint colour (as Dialogue UI's window does). The tint colour setting itself is unchanged.
+- The Immersion, Storyline and Lorewalker glows have soft corners (rounded, or cut at 45 degrees for Lorewalker's page) and a soft edge that follows their panel or page, in a more vivid version of your tint colour (as Dialogue UI's window does). The tint colour setting itself is unchanged.
 - Works with Lorewalker's Classic mode: its quest page gets a teal glow inside the page's torn edges (a deeper glow on its Dark theme), and the optional logo on its title bar. Its fade over the buttons takes the glow's colour, so it doesn't show as a band.
-- Works with ClassicUI Forever: the tint on its quest log window and on its map parchment, and the quest name marker in its quest log list and quest watch. Pages its dark themes darken get a teal glow.
+- Works with ClassicUI Forever: the tint on its quest log window (right to the page's burnt edges) and on its map parchment, and the quest name marker in its quest log list and quest watch. Pages its dark themes darken get a teal glow.
 - Works with Questie: the yellow ! and ? of non-vanilla quests on the world map and minimap are drawn in the tint colour. Grey, blue, event and PvP icons keep Questie's colours. New option, on by default.
 - Compatible with EllesmereUI: its Quest Tracker restyles Blizzard's objective tracker, so the quest name marker and objective colours carry over.
 - New option to add the WoW Forever logo beside non-vanilla quests in the objective tracker. Off by default.
