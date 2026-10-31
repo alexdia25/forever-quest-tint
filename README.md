@@ -60,9 +60,9 @@ Nothing to configure: the addon detects these on its own (`/fqt status` shows wh
 - **Questie**: the yellow ! and ? of non-vanilla quests on the world map and minimap are drawn in the tint colour (option above). Questie's grey (low level), blue (repeatable), event and PvP icons keep their own colours, and its hover highlight still shows. Questie's quest data is built from Classic and doesn't yet cover most quests new to Forever, so many of them have no Questie icon to tint yet.
 - **EllesmereUI**: its Quest Tracker restyles Blizzard's objective tracker, so the quest name marker and objective colours work in it as usual. EllesmereUI shows quest names on a single line, so a long name can cut off a marker placed after it; if that happens, tick **Put the marker at the start of the name**.
 
-| Storyline |
-| --- |
-| ![Storyline's speech bubble with the teal glow](screenshots/storyline.webp) |
+| Immersion | Storyline |
+| --- | --- |
+| ![Immersion's quest objectives panel with the teal glow](screenshots/immersion.png) | ![Storyline's speech bubble with the teal glow](screenshots/storyline.webp) |
 
 Using another quest or tracker addon? Open an issue with its name.
 
