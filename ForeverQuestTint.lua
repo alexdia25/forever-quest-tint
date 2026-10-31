@@ -22,7 +22,7 @@ ns.defaults = {
     objectiveTint = false,     -- recolour the objective lines of non-vanilla quests
     objectiveUseTint = true,   -- objectives use the tint colour...
     objectiveColor = { 0.60, 0.90, 0.95 }, -- ...or this colour
-    questieTint = true, -- recolour Questie's yellow ! and ? map icons for non-vanilla quests
+    questieTint = true, -- teal gradient on the yellow ! and ? map icons (the game's and Questie's) of non-vanilla quests
     preview = "auto", -- testing aid: "auto" marks non-vanilla quests, "on" marks every quest, "off" none
 }
 
@@ -808,30 +808,32 @@ end
 -- body (its edge art fades out softly), hence the inset. The logo goes in its top-right corner (the talking head's
 -- corner holds Immersion's own buttons).
 -- ImmersionFrame.lastEvent says what is showing; gossip is left alone.
-local IMM_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
-local IMM_INSET = 4                      -- the glow's outer edge: its soft rim fades out just outside the dark body
-local IMM_CORNER = 12                    -- corner piece size: radius ~8 (the panel's corners), rim ~4
-local IMM_SCALE, IMM_ALPHA = 0.75, 0.6   -- a deeper glow on the dark panel, in a vivid version of the tint
-local IMM_LOGO_SIZE = 24
-local IMM_LOGO_X, IMM_LOGO_Y = -18, -14  -- from the panel's top-right, level with its first heading
+local IMM = {
+    EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true },
+    INSET = 4,                 -- the glow's outer edge: its soft rim fades out just outside the dark body
+    CORNER = 12,               -- corner piece size: radius ~8 (the panel's corners), rim ~4
+    SCALE = 0.75, ALPHA = 0.6, -- a deeper glow on the dark panel, in a vivid version of the tint
+    LOGO_SIZE = 24,
+    LOGO_X = -18, LOGO_Y = -14, -- from the panel's top-right, level with its first heading
+}
 
 local immInner -- the panel's inside, for the glow to cover
 local function RefreshImmersion()
     local frame = _G.ImmersionFrame
     local panel = frame and frame.TalkBox and frame.TalkBox.Elements
     if not panel then return end
-    local show = frame:IsVisible() and panel:IsVisible() and IMM_EVENTS[frame.lastEvent] and IsMarked(GetQuestID())
+    local show = frame:IsVisible() and panel:IsVisible() and IMM.EVENTS[frame.lastEvent] and IsMarked(GetQuestID())
     if show and ns.cfg.showTint then
         if not immInner then
             immInner = CreateFrame("Frame", nil, panel)
-            immInner:SetPoint("TOPLEFT", IMM_INSET, -IMM_INSET)
-            immInner:SetPoint("BOTTOMRIGHT", -IMM_INSET, IMM_INSET)
+            immInner:SetPoint("TOPLEFT", IMM.INSET, -IMM.INSET)
+            immInner:SetPoint("BOTTOMRIGHT", -IMM.INSET, IMM.INSET)
         end
-        ApplyFlat("immersion", panel, immInner, IMM_SCALE, IMM_ALPHA, IMM_CORNER, "BORDER", true)
+        ApplyFlat("immersion", panel, immInner, IMM.SCALE, IMM.ALPHA, IMM.CORNER, "BORDER", true)
     else
         HideFlat("immersion")
     end
-    ApplyBadge("immersion", panel, show and ns.cfg.showLogo, "TOPRIGHT", "TOPRIGHT", IMM_LOGO_X, IMM_LOGO_Y, IMM_LOGO_SIZE)
+    ApplyBadge("immersion", panel, show and ns.cfg.showLogo, "TOPRIGHT", "TOPRIGHT", IMM.LOGO_X, IMM.LOGO_Y, IMM.LOGO_SIZE)
 end
 
 -- Immersion switches between gossip and quest text without hiding its window, so refresh after each of its
@@ -866,13 +868,15 @@ end
 -- (EdgeFade.EdgeFadeGradientTexture, tinted with its BackgroundColor), so text fades out as it scrolls under them.
 -- It has to stay above the text, so instead of moving it, it is recoloured to the glowing page's colour at its
 -- height (the page colour blended with the glow, as the glow blends it), and given back its own colour after.
-local LW_INSET = 10                           -- the glow's outer edge, inside the page's torn edges
-local LW_CORNER = 22                          -- chamfered corner piece size: a cut of ~12 along each side
-                                              -- (parallel to the page's own 45 degree corners), rim ~3.5
-local LW_SCALE, LW_ALPHA = 1, 0.55            -- light pages: a vivid tint, a little over half strength
-local LW_DARK_SCALE, LW_DARK_ALPHA = 0.75, 0.6 -- Dark theme: a deeper glow
-local LW_LOGO_SIZE = 24
-local LW_LOGO_X = -62 -- from the right end of the title bar, clear of its settings and close buttons
+local LW = {
+    INSET = 10,                          -- the glow's outer edge, inside the page's torn edges
+    CORNER = 22,                         -- chamfered corner piece size: a cut of ~12 along each side
+                                         -- (parallel to the page's own 45 degree corners), rim ~3.5
+    SCALE = 1, ALPHA = 0.55,             -- light pages: a vivid tint, a little over half strength
+    DARK_SCALE = 0.75, DARK_ALPHA = 0.6, -- Dark theme: a deeper glow
+    LOGO_SIZE = 24,
+    LOGO_X = -62, -- from the right end of the title bar, clear of its settings and close buttons
+}
 
 local function LorewalkerDark(texture)
     local file = texture and texture:GetTexture()
@@ -922,18 +926,18 @@ local function RefreshLorewalker()
     if show and ns.cfg.showTint then
         if not lwInner then
             lwInner = CreateFrame("Frame", nil, page)
-            lwInner:SetPoint("TOPLEFT", LW_INSET, -LW_INSET)
-            lwInner:SetPoint("BOTTOMRIGHT", -LW_INSET, LW_INSET)
+            lwInner:SetPoint("TOPLEFT", LW.INSET, -LW.INSET)
+            lwInner:SetPoint("BOTTOMRIGHT", -LW.INSET, LW.INSET)
         end
         local dark = LorewalkerDark(page.__Texture)
-        ApplyFlat("lorewalker", page, lwInner, dark and LW_DARK_SCALE or LW_SCALE, dark and LW_DARK_ALPHA or LW_ALPHA,
-            LW_CORNER, "ARTWORK", true, GLOW_CHAMFER)
+        ApplyFlat("lorewalker", page, lwInner, dark and LW.DARK_SCALE or LW.SCALE, dark and LW.DARK_ALPHA or LW.ALPHA,
+            LW.CORNER, "ARTWORK", true, GLOW_CHAMFER)
         TintLorewalkerEdgeFade(frame, true)
     else
         HideFlat("lorewalker")
         TintLorewalkerEdgeFade(frame, false)
     end
-    ApplyBadge("lorewalker", frame.TitleContainer, show and ns.cfg.showLogo, "RIGHT", "RIGHT", LW_LOGO_X, 0, LW_LOGO_SIZE)
+    ApplyBadge("lorewalker", frame.TitleContainer, show and ns.cfg.showLogo, "RIGHT", "RIGHT", LW.LOGO_X, 0, LW.LOGO_SIZE)
 end
 
 -- Questie (addon): its quest icons on the world map and minimap. Each is a pooled frame named QuestieFrame<n>,
@@ -959,46 +963,56 @@ local function QuestieTintable(frame)
     return false
 end
 
+-- The icon gradient, shared by Questie's icons and the game's map pins: over `tex` (the icon), a desaturated copy of
+-- its art (`file` and the art's texture coordinates l, r, t, b) in the vivid tint, solid over the bottom
+-- QUESTIE_SOLID of the icon at strength `alpha`, fading out by QUESTIE_FADE; drawn on `owner` in `layer`/`sublevel`.
+-- `height` is the icon's height. The two copy textures live on `owner`; show = false hides them.
+local function ApplyIconGradient(owner, tex, show, file, l, r, t, b, height, alpha, layer, sublevel)
+    local solid, fade = owner.fqtSolid, owner.fqtFade
+    if not (show and file and height and height > 0) then
+        if solid then
+            solid:Hide()
+            fade:Hide()
+        end
+        return
+    end
+    if not solid then
+        solid = owner:CreateTexture(nil, layer, nil, sublevel)
+        fade = owner:CreateTexture(nil, layer, nil, sublevel)
+        owner.fqtSolid, owner.fqtFade = solid, fade
+    end
+    -- The vivid tint: the plain one, desaturated, came out a pale grey-cyan close to the map's own colours.
+    local c = VividTint(ns.cfg.tint)
+    local cr, cg, cb = math.min(1, c[1] * QUESTIE_BRIGHTNESS), math.min(1, c[2] * QUESTIE_BRIGHTNESS),
+        math.min(1, c[3] * QUESTIE_BRIGHTNESS)
+    -- A horizontal slice of the icon, from `from` to `to` of the way up, with its matching texture coordinates.
+    local function slice(piece, from, to, alphaLow, alphaHigh)
+        piece:SetDrawLayer(layer, sublevel)
+        piece:ClearAllPoints()
+        piece:SetPoint("BOTTOMLEFT", tex, "BOTTOMLEFT", 0, height * from)
+        piece:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, height * from)
+        piece:SetHeight(height * (to - from))
+        piece:SetTexture(file)
+        piece:SetTexCoord(l, r, b + (t - b) * to, b + (t - b) * from)
+        piece:SetDesaturated(true)
+        piece:SetGradient("VERTICAL", CreateColor(cr, cg, cb, alphaLow), CreateColor(cr, cg, cb, alphaHigh))
+        piece:Show()
+    end
+    slice(solid, 0, QUESTIE_SOLID, alpha, alpha)
+    slice(fade, QUESTIE_SOLID, QUESTIE_FADE, alpha, 0)
+end
+
 local function ApplyQuestieTint(frame)
     local tex = frame.texture
     if not tex or not tex.OLDSetVertexColor then return end
     local plain = (tex.r or 1) == 1 and (tex.g or 1) == 1 and (tex.b or 1) == 1
     local data = frame.data
-    local solid, fade = frame.fqtSolid, frame.fqtFade
+    local show = ns.cfg.questieTint and plain and data and IsMarked(data.Id) and QuestieTintable(frame)
+    local ulx, uly, _, _, _, _, lrx, lry = tex:GetTexCoord()
     -- The frame's own size (Questie sets it with SetSize): the texture takes its size from the frame's position, which
-    -- isn't known yet when Questie colours an icon before placing it on the map.
-    local height = frame:GetHeight()
-    if ns.cfg.questieTint and plain and data and IsMarked(data.Id) and QuestieTintable(frame) and height and height > 0 then
-        if not solid then
-            -- Above Questie's icon (OVERLAY 0), level with its starter overlay, which is drawn outside the icon's shape.
-            solid = frame:CreateTexture(nil, "OVERLAY", nil, 1)
-            fade = frame:CreateTexture(nil, "OVERLAY", nil, 1)
-            frame.fqtSolid, frame.fqtFade = solid, fade
-        end
-        -- The vivid tint: the plain one, desaturated, came out a pale grey-cyan close to the map's own colours.
-        local c = VividTint(ns.cfg.tint)
-        local r, g, b = math.min(1, c[1] * QUESTIE_BRIGHTNESS), math.min(1, c[2] * QUESTIE_BRIGHTNESS),
-            math.min(1, c[3] * QUESTIE_BRIGHTNESS)
-        local a = tex.a or 1
-        local ulx, uly, _, _, _, _, lrx, lry = tex:GetTexCoord()
-        -- A horizontal slice of the icon, from `from` to `to` of the way up, with its matching texture coordinates.
-        local function slice(piece, from, to, alphaLow, alphaHigh)
-            piece:ClearAllPoints()
-            piece:SetPoint("BOTTOMLEFT", tex, "BOTTOMLEFT", 0, height * from)
-            piece:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, height * from)
-            piece:SetHeight(height * (to - from))
-            piece:SetTexture(frame.fqtIcon)
-            piece:SetTexCoord(ulx, lrx, lry + (uly - lry) * to, lry + (uly - lry) * from)
-            piece:SetDesaturated(true)
-            piece:SetGradient("VERTICAL", CreateColor(r, g, b, alphaLow), CreateColor(r, g, b, alphaHigh))
-            piece:Show()
-        end
-        slice(solid, 0, QUESTIE_SOLID, a, a)
-        slice(fade, QUESTIE_SOLID, QUESTIE_FADE, a, 0)
-    elseif solid then
-        solid:Hide()
-        fade:Hide()
-    end
+    -- isn't known yet when Questie colours an icon before placing it on the map. Above Questie's icon (OVERLAY 0),
+    -- level with its starter overlay, which is drawn outside the icon's shape.
+    ApplyIconGradient(frame, tex, show, frame.fqtIcon, ulx, lrx, uly, lry, frame:GetHeight(), tex.a or 1, "OVERLAY", 1)
 end
 
 local function HookQuestieFrame(frame)
@@ -1040,6 +1054,76 @@ local function RefreshQuestie()
     for _, frame in ipairs(questieFrames) do ApplyQuestieTint(frame) end
 end
 
+-- The game's own world map pins (Forever's map, like retail's), for players without Questie: quest givers
+-- (QuestOfferPinTemplate: pin.Texture, the yellow ! is the QuestNormal atlas, quest in pin.questID; trivial quests
+-- are drawn at half alpha and left alone, like Questie's grey !) and quests (QuestPinTemplate, a POI button:
+-- pin.Display.Icon, the plain turn-in ? is UI-QuestIcon-TurnIn-Normal, quest from pin:GetQuestID()). The same
+-- gradient as Questie's icons, on the plain yellow icons only; campaign, daily, legendary and other special icons are
+-- left alone. Pins are pooled, so each is hooked to look again whenever the map reuses it.
+-- Kept in one table: the file is near Lua's limit of 200 locals in one scope.
+local MapPins = { seen = setmetatable({}, { __mode = "k" }), hooked = false }
+MapPins.icons = {
+    QuestOfferPinTemplate = {
+        atlas = "QuestNormal",
+        texture = function(pin) return pin.Texture end,
+        questID = function(pin) return pin.questID end,
+        wanted = function(pin) return (pin.pinAlpha or 1) >= 1 end,
+    },
+    QuestPinTemplate = {
+        atlas = "UI-QuestIcon-TurnIn-Normal",
+        texture = function(pin) return pin.Display and pin.Display.Icon end,
+        questID = function(pin) return pin.GetQuestID and pin:GetQuestID() end,
+    },
+}
+
+function MapPins.Apply(pin, kind)
+    local tex = kind.texture(pin)
+    if not (tex and tex.GetAtlas) then return end
+    local owner = tex:GetParent()
+    local atlas = tex:GetAtlas()
+    local show = ns.cfg.questieTint and atlas == kind.atlas and (not kind.wanted or kind.wanted(pin))
+        and IsMarked(kind.questID(pin))
+    local info = show and C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(atlas)
+    if not info then
+        ApplyIconGradient(owner, tex, false)
+        return
+    end
+    local layer, sublevel = tex:GetDrawLayer()
+    local height = tex:GetHeight()
+    if not height or height <= 0 then height = owner:GetHeight() end
+    ApplyIconGradient(owner, tex, true, info.file or info.filename, info.leftTexCoord, info.rightTexCoord,
+        info.topTexCoord, info.bottomTexCoord, height, 1, layer, math.min((sublevel or 0) + 1, 7))
+end
+
+function MapPins.Refresh()
+    local map = _G.WorldMapFrame
+    if not (map and map.EnumeratePinsByTemplate) then return end
+    for template, kind in pairs(MapPins.icons) do
+        for pin in map:EnumeratePinsByTemplate(template) do
+            if not MapPins.seen[pin] then
+                MapPins.seen[pin] = true
+                if type(pin.OnAcquired) == "function" then
+                    hooksecurefunc(pin, "OnAcquired", function(self) MapPins.Apply(self, kind) end)
+                end
+            end
+            MapPins.Apply(pin, kind)
+        end
+    end
+end
+
+-- The map lays out its pins as it opens, changes map or refreshes; look over them just after.
+function MapPins.Hook()
+    local map = _G.WorldMapFrame
+    if MapPins.hooked or not (map and map.EnumeratePinsByTemplate and map.HookScript) then return end
+    MapPins.hooked = true
+    local function soon() C_Timer.After(0, MapPins.Refresh) end
+    map:HookScript("OnShow", soon)
+    for _, method in ipairs({ "OnMapChanged", "RefreshAllDataProviders" }) do
+        if type(map[method]) == "function" then hooksecurefunc(map, method, soon) end
+    end
+    MapPins.Refresh()
+end
+
 local lwHooked = false
 local function HookLorewalker()
     local frame = _G.LWDialogFrame
@@ -1070,29 +1154,31 @@ end
 -- chat-bubble backdrop whose dark body reaches almost to its thin border line. The glow fills that body, with its
 -- bottom corners rounded to the bubble's, drawn above the backdrop's dark edge pieces so it reaches the rim; the
 -- scene above is zone art and is left alone. Storyline_NPCFrameChat.event is what the bubble is showing.
-local SL_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
-local SL_INSET = 2                      -- the glow's outer edge, just inside the bubble's border line
-local SL_CORNER = 6                     -- corner piece size: radius ~4 (the bubble's tight corners), rim ~2
-local SL_SCALE, SL_ALPHA = 0.75, 0.6    -- a deeper glow on the dark bubble, in a vivid version of the tint
-local SL_LOGO_SIZE = 24
-local SL_LOGO_X, SL_LOGO_Y = -16, -10   -- from the bubble's top-right, in the margin beside the NPC's name
+local SL = {
+    EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true },
+    INSET = 2,                 -- the glow's outer edge, just inside the bubble's border line
+    CORNER = 6,                -- corner piece size: radius ~4 (the bubble's tight corners), rim ~2
+    SCALE = 0.75, ALPHA = 0.6, -- a deeper glow on the dark bubble, in a vivid version of the tint
+    LOGO_SIZE = 24,
+    LOGO_X = -16, LOGO_Y = -10, -- from the bubble's top-right, in the margin beside the NPC's name
+}
 
 local slInner -- the bubble's inside, for the wash to cover
 local function RefreshStoryline()
     local frame, chat = _G.Storyline_NPCFrame, _G.Storyline_NPCFrameChat
     if not frame or not chat then return end
-    local show = frame:IsVisible() and chat:IsVisible() and SL_EVENTS[chat.event] and IsMarked(GetQuestID())
+    local show = frame:IsVisible() and chat:IsVisible() and SL.EVENTS[chat.event] and IsMarked(GetQuestID())
     if show and ns.cfg.showTint then
         if not slInner then
             slInner = CreateFrame("Frame", nil, chat)
-            slInner:SetPoint("TOPLEFT", SL_INSET, -SL_INSET)
-            slInner:SetPoint("BOTTOMRIGHT", -SL_INSET, SL_INSET)
+            slInner:SetPoint("TOPLEFT", SL.INSET, -SL.INSET)
+            slInner:SetPoint("BOTTOMRIGHT", -SL.INSET, SL.INSET)
         end
-        ApplyFlat("storyline", chat, slInner, SL_SCALE, SL_ALPHA, SL_CORNER, "BORDER", true)
+        ApplyFlat("storyline", chat, slInner, SL.SCALE, SL.ALPHA, SL.CORNER, "BORDER", true)
     else
         HideFlat("storyline")
     end
-    ApplyBadge("storyline", chat, show and ns.cfg.showLogo, "TOPRIGHT", "TOPRIGHT", SL_LOGO_X, SL_LOGO_Y, SL_LOGO_SIZE)
+    ApplyBadge("storyline", chat, show and ns.cfg.showLogo, "TOPRIGHT", "TOPRIGHT", SL.LOGO_X, SL.LOGO_Y, SL.LOGO_SIZE)
 end
 
 local slHooked = false
@@ -1777,6 +1863,7 @@ loader:SetScript("OnEvent", function(_, event, name)
     HookQuestie()
     HookQuestieTracker()
     HookStoryline()
+    MapPins.Hook()
 end)
 HookLog()
 HookMarkers()
@@ -1786,6 +1873,7 @@ HookLorewalker()
 HookCUIF()
 HookQuestie()
 HookStoryline()
+MapPins.Hook()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
@@ -1801,6 +1889,8 @@ function ns.Reapply()
     HookCUIF()
     HookQuestie()
     RefreshQuestie()
+    MapPins.Hook()
+    MapPins.Refresh()
     HookQuestieTracker()
     RefreshQuestieTracker()
     HookStoryline()

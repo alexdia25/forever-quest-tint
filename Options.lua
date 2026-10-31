@@ -42,7 +42,7 @@ local function MakeCheck(label, key, anchor, x, y)
 end
 local showTint = MakeCheck("Tint the parchment teal", "showTint", sub, -4, -16)
 local showLogo = MakeCheck("Add the WoW Forever logo above the quest text", "showLogo", showTint, 0, -2)
-local questieTint = MakeCheck("Tint Questie's ! and ? map icons", "questieTint", showLogo, 0, -2)
+local questieTint = MakeCheck("Tint the ! and ? map icons", "questieTint", showLogo, 0, -2)
 
 -- Colour swatch
 local colorLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
