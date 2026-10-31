@@ -586,7 +586,7 @@ end
 -- With `corner`, the glow takes a panel's shape: shaped bottom corners and a soft rim, from corner art made by
 -- logo/make_glow_corner.py: Media/GlowCorner.tga (the default) is the bottom-left of a soft-edged rounded rectangle,
 -- its rim 10/32 of the corner piece and its radius 22/32; Media/GlowChamfer.tga (`art`) has its corners cut off at
--- 45 degrees, its rim 5/32 and its cut 22/32 along each side. `corner` is the size the art's 32x32 corner quadrant
+-- 45 degrees, its rim 5/32 and its cut 17/32 along each side. `corner` is the size the art's 32x32 corner quadrant
 -- is drawn at. `region` is the
 -- glow's outer edge, where the rim has faded out. Six pieces, each carrying its share of the vertical fade: the two
 -- bottom corners, the bottom edge between them and the two sides above them (stretched from the straight parts of
@@ -790,7 +790,7 @@ end
 -- It has to stay above the text, so instead of moving it, it is recoloured to the glowing page's colour at its
 -- height (the page colour blended with the glow, as the glow blends it), and given back its own colour after.
 local LW_INSET = 10                           -- the glow's outer edge, inside the page's torn edges
-local LW_CORNER = 22                          -- chamfered corner piece size: a cut of ~15 along each side
+local LW_CORNER = 22                          -- chamfered corner piece size: a cut of ~12 along each side
                                               -- (parallel to the page's own 45 degree corners), rim ~3.5
 local LW_SCALE, LW_ALPHA = 1, 0.55            -- light pages: a vivid tint, a little over half strength
 local LW_DARK_SCALE, LW_DARK_ALPHA = 0.75, 0.6 -- Dark theme: a deeper glow

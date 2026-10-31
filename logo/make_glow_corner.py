@@ -16,9 +16,9 @@ from PIL import Image
 
 STYLE, OUT = sys.argv[1], sys.argv[2]
 SIZE = 64
-# rounded: body from 10, corner radius 22 (centre at 32, 32). chamfer: body from 5, cut 22 along each side.
+# rounded: body from 10, corner radius 22 (centre at 32, 32). chamfer: body from 5, cut 17 along each side.
 FEATHER = {"rounded": 10, "chamfer": 5}[STYLE]
-RADIUS, CUT = 22, 22
+RADIUS, CUT = 22, 17
 
 
 def smoothstep(t):
