@@ -578,9 +578,8 @@ end
 
 -- A flat teal wash over the bottom of a page whose art can't simply be copied (sliced art, or a window's art in
 -- pieces), like the Black contrast setting's glow above: brightness `scale` and strength `strength` (relative to
--- cfg.alpha). An optional mask (file and texture coordinates) trims it to the page's own outline. Drawn one
--- sublevel above `region` when it is a texture, else at the top of `parent`'s background layer, or of `drawLayer`
--- when given: a backdrop draws its edges and corners on BORDER, above its BACKGROUND centre, so a glow meant to
+-- cfg.alpha). Drawn one sublevel above `region` when it is a texture, else at the top of `parent`'s background
+-- layer, or of `drawLayer` when given: a backdrop draws its edges and corners on BORDER, above its BACKGROUND centre, so a glow meant to
 -- cover them goes on BORDER too. With `vivid`, the tint is pushed away from grey first (VividTint), for dark panels
 -- where the plain tint reads as grey.
 --
@@ -600,10 +599,21 @@ local function HideFlat(key)
     local ov = flats[key]
     if not ov then return end
     ov:Hide()
+    ov.fqtShown = nil
     for _, tex in ipairs(ov.fqtPieces) do tex:Hide() end
 end
 
-local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoords, corner, drawLayer, vivid)
+-- The glow's colour and strength at screen height `y` (from another frame's GetTop/GetBottom), for art drawn
+-- above the glow that has to match the glowing page below it. Nil while the glow is hidden.
+local function FlatColourAt(key, y)
+    local ov = flats[key]
+    local bottom = ov and ov.fqtShown and ov.fqtRegion:GetBottom()
+    if not bottom or not y then return nil end
+    local c = ov.fqtColour
+    return c[1], c[2], c[3], math.max(0, math.min(1, ov.fqtAlphaAt(y - bottom)))
+end
+
+local function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer, vivid)
     local cfg = ns.cfg
     local height = region and region:GetHeight()
     local fade = height and height * cfg.height
@@ -622,16 +632,6 @@ local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoo
         layer, sublevel = region:GetDrawLayer()
         sublevel = math.min((sublevel or 0) + 1, 7)
     end
-    if maskFile then
-        if not ov.fqtMask then
-            ov.fqtMask = parent:CreateMaskTexture()
-            ov:AddMaskTexture(ov.fqtMask)
-        end
-        ov.fqtMask:ClearAllPoints()
-        ov.fqtMask:SetAllPoints(region)
-        ov.fqtMask:SetTexture(maskFile, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-        if maskCoords then ov.fqtMask:SetTexCoord(unpack(maskCoords)) end
-    end
     local c = vivid and VividTint(cfg.tint) or cfg.tint
     local r, g, b = c[1] * scale, c[2] * scale, c[3] * scale
     -- Opacity at y units above the bottom: cfg.alpha there, cfg.topAlpha where the fade ends.
@@ -640,6 +640,7 @@ local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoo
         return (cfg.topAlpha + (cfg.alpha - cfg.topAlpha) * (1 - y / fade)) * strength
     end
     local function colour(a) return CreateColor(r, g, b, a) end
+    ov.fqtRegion, ov.fqtAlphaAt, ov.fqtColour, ov.fqtShown = region, alphaAt, { r, g, b }, true
     local function place(tex, left, right, y0, y1)
         tex:SetDrawLayer(layer, sublevel)
         tex:ClearAllPoints()
@@ -651,7 +652,7 @@ local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoo
     end
 
     if not (corner and corner > 0) then
-        -- One piece: the plain wash (and the masked one).
+        -- One piece: the plain wash.
         place(ov, 0, 0, 0, fade)
         ov:SetGradient("VERTICAL", colour(alphaAt(0)), colour(alphaAt(fade)))
         for _, tex in ipairs(ov.fqtPieces) do tex:Hide() end
@@ -746,7 +747,7 @@ local function RefreshImmersion()
             immInner:SetPoint("TOPLEFT", IMM_INSET, -IMM_INSET)
             immInner:SetPoint("BOTTOMRIGHT", -IMM_INSET, IMM_INSET)
         end
-        ApplyFlat("immersion", panel, immInner, IMM_SCALE, IMM_ALPHA, nil, nil, IMM_CORNER, "BORDER", true)
+        ApplyFlat("immersion", panel, immInner, IMM_SCALE, IMM_ALPHA, IMM_CORNER, "BORDER", true)
     else
         HideFlat("immersion")
     end
@@ -775,12 +776,19 @@ local function HookImmersion()
 end
 
 -- Lorewalker (addon), Classic mode: quest text in LWDialogFrame, on a page drawn by ContentFrame.BackgroundTexture
--- (a frame holding the real, sliced texture in __Texture). Its QuestFrame part is shown only for quests, not gossip.
+-- (a frame holding the real, sliced texture in __Texture, on ARTWORK). Its QuestFrame part is shown only for
+-- quests, not gossip. The glow is the soft rounded one, inset from the page's torn edges, above the page texture.
 -- Lorewalker gives quests it considers new to Forever a page of its own; the tint and logo follow this addon's list.
 -- Its Immersive and Story modes have no page, so they are left alone.
-local LW_PAGE_COORDS = { 0, 366 / 512, 0, 466 / 512 } -- the page within each of Lorewalker's 512x512 page sheets
-local LW_SCALE, LW_ALPHA = 1, 0.55            -- light pages: the tint colour, a little over half strength
-local LW_DARK_SCALE, LW_DARK_ALPHA = 0.75, 0.6 -- Dark theme: a deeper teal glow
+--
+-- Like Dialogue UI's divider, Lorewalker draws a fade in the page's colour above the text over the buttons
+-- (EdgeFade.EdgeFadeGradientTexture, tinted with its BackgroundColor), so text fades out as it scrolls under them.
+-- It has to stay above the text, so instead of moving it, it is recoloured to the glowing page's colour at its
+-- height (the page colour blended with the glow, as the glow blends it), and given back its own colour after.
+local LW_INSET = 10                           -- the glow's outer edge, inside the page's torn edges
+local LW_CORNER = 12                          -- corner piece size: radius ~8, rim ~4
+local LW_SCALE, LW_ALPHA = 1, 0.55            -- light pages: a vivid tint, a little over half strength
+local LW_DARK_SCALE, LW_DARK_ALPHA = 0.75, 0.6 -- Dark theme: a deeper glow
 local LW_LOGO_SIZE = 24
 local LW_LOGO_X = -62 -- from the right end of the title bar, clear of its settings and close buttons
 
@@ -790,6 +798,39 @@ local function LorewalkerDark(texture)
     return type(LorewalkerDB_Global) == "table" and LorewalkerDB_Global.Theme == 2 -- Lorewalker's Theme: 2 = Dark
 end
 
+-- The edge fade's texture, and its own colour: whatever it has when it isn't the colour this addon last gave it.
+local function LorewalkerEdgeFade(frame)
+    local edge = frame.EdgeFade and frame.EdgeFade.EdgeFadeGradientTexture
+    local tex = edge and edge.__Texture
+    if not tex or not tex.GetVertexColor then return nil end
+    local r, g, b, a = tex:GetVertexColor()
+    local mine = tex.fqtGiven
+    if not (mine and math.abs(r - mine[1]) < 0.002 and math.abs(g - mine[2]) < 0.002 and math.abs(b - mine[3]) < 0.002) then
+        tex.fqtOwn = { r, g, b, a or 1 }
+    end
+    return tex, edge
+end
+
+local function TintLorewalkerEdgeFade(frame, on)
+    local tex, edge = LorewalkerEdgeFade(frame)
+    if not tex then return end
+    local own = tex.fqtOwn
+    local r, g, b, a
+    if on then
+        local top, bottom = edge:GetTop(), edge:GetBottom()
+        r, g, b, a = FlatColourAt("lorewalker", top and bottom and (top + bottom) / 2)
+    end
+    if r then
+        local mix = { own[1] + (r - own[1]) * a, own[2] + (g - own[2]) * a, own[3] + (b - own[3]) * a }
+        tex.fqtGiven = mix
+        tex:SetVertexColor(mix[1], mix[2], mix[3], own[4])
+    elseif tex.fqtGiven then
+        tex.fqtGiven = nil
+        tex:SetVertexColor(own[1], own[2], own[3], own[4])
+    end
+end
+
+local lwInner -- the page's inside, for the glow to cover
 local function RefreshLorewalker()
     local frame = _G.LWDialogFrame
     local content = frame and frame.ContentFrame
@@ -797,13 +838,18 @@ local function RefreshLorewalker()
     if not page or not frame.QuestFrame then return end
     local show = frame:IsVisible() and frame.QuestFrame:IsShown() and IsMarked(GetQuestID())
     if show and ns.cfg.showTint then
-        local texture = page.__Texture
-        local dark = LorewalkerDark(texture)
-        ApplyFlat("lorewalker", page, texture or page,
-            dark and LW_DARK_SCALE or LW_SCALE, dark and LW_DARK_ALPHA or LW_ALPHA,
-            texture and texture:GetTexture(), LW_PAGE_COORDS)
+        if not lwInner then
+            lwInner = CreateFrame("Frame", nil, page)
+            lwInner:SetPoint("TOPLEFT", LW_INSET, -LW_INSET)
+            lwInner:SetPoint("BOTTOMRIGHT", -LW_INSET, LW_INSET)
+        end
+        local dark = LorewalkerDark(page.__Texture)
+        ApplyFlat("lorewalker", page, lwInner, dark and LW_DARK_SCALE or LW_SCALE, dark and LW_DARK_ALPHA or LW_ALPHA,
+            LW_CORNER, "ARTWORK", true)
+        TintLorewalkerEdgeFade(frame, true)
     else
         HideFlat("lorewalker")
+        TintLorewalkerEdgeFade(frame, false)
     end
     ApplyBadge("lorewalker", frame.TitleContainer, show and ns.cfg.showLogo, "RIGHT", "RIGHT", LW_LOGO_X, 0, LW_LOGO_SIZE)
 end
@@ -930,7 +976,7 @@ local function RefreshStoryline()
             slInner:SetPoint("TOPLEFT", SL_INSET, -SL_INSET)
             slInner:SetPoint("BOTTOMRIGHT", -SL_INSET, SL_INSET)
         end
-        ApplyFlat("storyline", chat, slInner, SL_SCALE, SL_ALPHA, nil, nil, SL_CORNER, "BORDER", true)
+        ApplyFlat("storyline", chat, slInner, SL_SCALE, SL_ALPHA, SL_CORNER, "BORDER", true)
     else
         HideFlat("storyline")
     end
@@ -1335,7 +1381,11 @@ end
 -- through its public API (ClassicUIForeverAPI.GetFrame). The parts used below (the log's detail pane and list area)
 -- are its internals, so each is checked before use. Its quest-giver window is the game's and its map pane's parchment
 -- is handled in TintLogFrame, so the tint above covers those already.
-local CUIF_SCALE, CUIF_ALPHA = 1, 0.55 -- the wash on its quest log page: the tint colour, a little over half strength
+-- On its quest log page (the window's art; the detail pane covers almost exactly the parchment) the glow is the soft
+-- rounded one, inset so it fades out before the page's burnt, torn edges.
+local CUIF_SCALE, CUIF_ALPHA = 1, 0.55 -- a vivid tint, a little over half strength
+local CUIF_INSET = 8                   -- the glow's outer edge, inside the page's burnt edges
+local CUIF_CORNER = 16                 -- corner piece size: radius ~11, rim ~5, for the torn corners
 
 local function CUIFFrame(name)
     local api = _G.ClassicUIForeverAPI
@@ -1352,7 +1402,12 @@ local function RefreshCUIFLog()
     if not detail then return end
     local id = C_QuestLog and C_QuestLog.GetSelectedQuest and C_QuestLog.GetSelectedQuest()
     if ns.cfg.showTint and frame:IsVisible() and detail:IsShown() and IsMarked(id) then
-        ApplyFlat("cuifLog", frame, detail, CUIF_SCALE, CUIF_ALPHA)
+        if not frame.fqtInner then
+            frame.fqtInner = CreateFrame("Frame", nil, frame)
+            frame.fqtInner:SetPoint("TOPLEFT", detail, "TOPLEFT", CUIF_INSET, -CUIF_INSET)
+            frame.fqtInner:SetPoint("BOTTOMRIGHT", detail, "BOTTOMRIGHT", -CUIF_INSET, CUIF_INSET)
+        end
+        ApplyFlat("cuifLog", frame, frame.fqtInner, CUIF_SCALE, CUIF_ALPHA, CUIF_CORNER, "BACKGROUND", true)
     else
         HideFlat("cuifLog")
     end
