@@ -1388,12 +1388,18 @@ end
 -- is handled in TintLogFrame, so the tint above covers those already.
 -- Its quest log page is part of the window's art (two textures side by side in the double pane, four in the single),
 -- so, as with the game's own parchment, the tint is a desaturated, tinted copy of that art: of the part of each art
--- texture under the bottom of the detail pane, which covers almost exactly the parchment. It follows the paper right
--- to its burnt, torn edges, in the vivid tint. A page one of its dark themes has inked gets the soft glow instead,
+-- texture under the bottom of the page: the detail pane, widened to the page's burnt edges (measured from its art,
+-- per layout). It follows the paper right to its burnt, torn edges, in the vivid tint. A page one of its dark themes has inked gets the soft glow instead,
 -- since a copy of a dark page stays dark.
 local CUIF_DARK_SCALE, CUIF_DARK_ALPHA = 0.75, 0.6 -- the glow on a dark page
 local CUIF_INSET = 8                              -- the glow's outer edge, inside the page's burnt edges
 local CUIF_CORNER = 16                            -- glow corner piece size: radius ~11, rim ~5
+-- How far the page's burnt edges reach past the detail pane, in the window's units (from its art): its double pane
+-- (frame.dual, UI-QuestLogDualPane-*) and its single pane (UI-QuestLog-*).
+local CUIF_PAGE_PAD = {
+    dual = { left = 2, right = 5, bottom = 3 },
+    single = { left = 4, right = 0, bottom = 1 },
+}
 local cuifCopies = {} -- copy textures, in use order
 local cuifOwn = {}    -- this addon's textures on the window, never copied themselves
 
@@ -1408,6 +1414,8 @@ local function ApplyCUIFCopies(frame, detail)
         HideCUIFCopies()
         return false
     end
+    local pad = frame.dual and CUIF_PAGE_PAD.dual or CUIF_PAGE_PAD.single
+    left, right, bottom = left - pad.left, right + pad.right, bottom - pad.bottom
     local cfg = ns.cfg
     local fadeTop = bottom + (top - bottom) * cfg.height
     if fadeTop <= bottom then
