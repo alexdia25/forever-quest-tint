@@ -581,7 +581,8 @@ end
 -- cfg.alpha). An optional mask (file and texture coordinates) trims it to the page's own outline. With `corner` (a
 -- radius), the bottom corners are rounded to match a panel's: the lowest `corner` units are drawn as narrower
 -- strips that follow the curve, each carrying its share of the same fade. Drawn one sublevel above `region` when it
--- is a texture, else at the top of `parent`'s background layer.
+-- is a texture, else at the top of `parent`'s background layer, or of `drawLayer` when given: a backdrop draws its
+-- edges and corners on BORDER, above its BACKGROUND centre, so a glow meant to cover them goes on BORDER too.
 local CORNER_STEPS = 4
 local flats = {}
 
@@ -592,7 +593,7 @@ local function HideFlat(key)
     for _, step in ipairs(ov.fqtSteps) do step:Hide() end
 end
 
-local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoords, corner)
+local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoords, corner, drawLayer)
     local cfg = ns.cfg
     local height = region and region:GetHeight()
     local fade = height and height * cfg.height
@@ -602,12 +603,12 @@ local function ApplyFlat(key, parent, region, scale, strength, maskFile, maskCoo
     end
     local ov = flats[key]
     if not ov then
-        ov = parent:CreateTexture(nil, "BACKGROUND", nil, 7)
+        ov = parent:CreateTexture(nil, drawLayer or "BACKGROUND", nil, 7)
         ov.fqtSteps = {}
         flats[key] = ov
     end
-    local layer, sublevel = "BACKGROUND", 7
-    if region.GetDrawLayer then
+    local layer, sublevel = drawLayer or "BACKGROUND", 7
+    if not drawLayer and region.GetDrawLayer then
         layer, sublevel = region:GetDrawLayer()
         sublevel = math.min((sublevel or 0) + 1, 7)
     end
@@ -680,11 +681,13 @@ end
 -- Immersion (addon): quest text in ImmersionFrame.TalkBox (its "talking head"), with the quest's objectives and
 -- rewards in a dark panel below it, TalkBox.Elements: a backdrop with 16px edges that Immersion shows only for
 -- quests and resizes to its contents. The glow fills the panel's dark body, with its bottom corners rounded to the
--- panel's, and the logo goes in its top-right corner (the talking head's corner holds Immersion's own buttons).
+-- panel's, drawn above the backdrop's dark edge pieces so it reaches the rim. The frame is wider than the dark
+-- body (its edge art fades out softly), hence the inset. The logo goes in its top-right corner (the talking head's
+-- corner holds Immersion's own buttons).
 -- ImmersionFrame.lastEvent says what is showing; gossip is left alone.
 local IMM_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
-local IMM_INSET = 4                      -- the panel's dark body reaches this close to its frame edge
-local IMM_CORNER = 8                     -- radius of the dark body's rounded corners
+local IMM_INSET = 8                      -- where the panel's dark body starts, inside its frame edge
+local IMM_CORNER = 10                    -- radius of the dark body's rounded corners
 local IMM_SCALE, IMM_ALPHA = 0.75, 0.6   -- a deeper teal glow on the dark panel
 local IMM_LOGO_SIZE = 24
 local IMM_LOGO_X, IMM_LOGO_Y = -18, -14  -- from the panel's top-right, level with its first heading
@@ -701,7 +704,7 @@ local function RefreshImmersion()
             immInner:SetPoint("TOPLEFT", IMM_INSET, -IMM_INSET)
             immInner:SetPoint("BOTTOMRIGHT", -IMM_INSET, IMM_INSET)
         end
-        ApplyFlat("immersion", panel, immInner, IMM_SCALE, IMM_ALPHA, nil, nil, IMM_CORNER)
+        ApplyFlat("immersion", panel, immInner, IMM_SCALE, IMM_ALPHA, nil, nil, IMM_CORNER, "BORDER")
     else
         HideFlat("immersion")
     end
@@ -864,10 +867,11 @@ local function HookLorewalker()
 end
 
 -- Storyline (addon): quest text in a speech bubble (Storyline_NPCFrameChat) along the bottom of its scene, a dark
--- chat-bubble backdrop whose dark body reaches almost to its thin border. The glow fills that body, with its bottom
--- corners rounded to the bubble's; the scene above is zone art and is left alone. Storyline_NPCFrameChat.event is what the bubble is showing.
+-- chat-bubble backdrop whose dark body reaches almost to its thin border line. The glow fills that body, with its
+-- bottom corners rounded to the bubble's, drawn above the backdrop's dark edge pieces so it reaches the rim; the
+-- scene above is zone art and is left alone. Storyline_NPCFrameChat.event is what the bubble is showing.
 local SL_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
-local SL_INSET = 5                      -- just inside the bubble's thin border line
+local SL_INSET = 3                      -- just inside the bubble's thin border line, at its frame edge
 local SL_CORNER = 8                     -- radius of the bubble's rounded corners
 local SL_SCALE, SL_ALPHA = 0.75, 0.6    -- a deeper teal glow on the dark bubble
 local SL_LOGO_SIZE = 24
@@ -884,7 +888,7 @@ local function RefreshStoryline()
             slInner:SetPoint("TOPLEFT", SL_INSET, -SL_INSET)
             slInner:SetPoint("BOTTOMRIGHT", -SL_INSET, SL_INSET)
         end
-        ApplyFlat("storyline", chat, slInner, SL_SCALE, SL_ALPHA, nil, nil, SL_CORNER)
+        ApplyFlat("storyline", chat, slInner, SL_SCALE, SL_ALPHA, nil, nil, SL_CORNER, "BORDER")
     else
         HideFlat("storyline")
     end
