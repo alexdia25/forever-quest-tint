@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0
+- Works with the Immersion addon: its Quest Objectives and Rewards panel gets a teal glow, and the optional logo in the panel's corner.
+- Works with Storyline: its speech bubble gets a teal glow while it shows quest text, and the optional logo in the bubble's corner.
+- The Immersion, Storyline and Lorewalker glows have soft corners (rounded, or cut at 45 degrees for Lorewalker's page) and a soft edge that follows their panel or page, in a more vivid version of your tint colour (as Dialogue UI's window does). The tint colour setting itself is unchanged.
+- Works with Lorewalker's Classic mode: its quest page gets a teal glow inside the page's torn edges (a deeper glow on its Dark theme), and the optional logo on its title bar. Its fade over the buttons takes the glow's colour, so it doesn't show as a band.
+- Works with ClassicUI Forever: the tint on its quest log window (right to the page's burnt edges) and on its map parchment, and the quest name marker in its quest log list and quest watch. Pages its dark themes darken get a teal glow.
+- The yellow ! and ? of non-vanilla quests on the world map get a teal gradient rising from the bottom (new option, on by default).
+- Works with Questie: the yellow ! and ? of non-vanilla quests on the world map and minimap get a teal gradient rising from the bottom, like the quest window, and its quest tracker gets the quest name marker. Grey, blue, event and PvP icons keep Questie's colours. New option, on by default.
+- Works with EllesmereUI: with its skin on, the quest window and quest log get a flat teal glow across the whole window instead of a parchment tint. Its Quest Tracker restyles Blizzard's objective tracker, so the quest name marker and objective colours carry over.
+- New option to add the WoW Forever logo beside non-vanilla quests in the objective tracker. Off by default.
+- New preview setting for testing: force the tint, logo and marker on or off for every quest, or leave it on auto. In the options panel, or `/fqt preview on|off|auto`. You get a reminder at login while it isn't on auto.
+- New `/fqt status`: version, game interface, preview mode and which supported UI addons were found.
+- The addon now has an icon in the AddOns list, and loads after Dialogue UI, Immersion, Storyline, Lorewalker, Questie, ClassicUI Forever and EllesmereUI when they are installed.
+
 ## 0.6.3
 - Fixed idle CPU use while the objective tracker is visible. The tracker is now rescanned only when it or the quest log changes, instead of ten times a second, and the Dialogue UI size watcher only runs while the Dialogue UI quest window is open. Thanks to the reporter of issue #2.
 

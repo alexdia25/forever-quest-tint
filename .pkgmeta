@@ -4,3 +4,6 @@ ignore:
   - screenshots
   - logo
   - .pkgmeta
+  - ForeverQuestTint_Mainline.toc
+  - ForeverQuestTint_TBC.toc
+  - tests

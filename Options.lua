@@ -1,7 +1,15 @@
 local ADDON, ns = ...
 
-local panel = CreateFrame("Frame")
-panel.name = "Forever Quest Tint"
+-- The settings canvas scrolls: the options are laid out on `panel`, the scroll child, which is taller than the
+-- settings window. Its height follows the lowest option once laid out (see FitContent below).
+local canvas = CreateFrame("Frame")
+canvas.name = "Forever Quest Tint"
+local scroll = CreateFrame("ScrollFrame", nil, canvas, "UIPanelScrollFrameTemplate")
+scroll:SetPoint("TOPLEFT", 0, -4)
+scroll:SetPoint("BOTTOMRIGHT", -28, 4)
+local panel = CreateFrame("Frame", nil, scroll)
+panel:SetSize(640, 800)
+scroll:SetScrollChild(panel)
 
 local syncing = false
 local widgets = {}
@@ -14,7 +22,7 @@ title:SetText("Forever Quest Tint")
 
 local sub = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
 sub:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-sub:SetText("Marks quests that were not in original Classic: a teal tint on the quest text background, and/or the WoW Forever logo.\nOpen a non-vanilla quest in the Map & Quest Log to preview changes.")
+sub:SetText("Marks quests that were not in original Classic: a teal tint on the quest text background, and/or the WoW Forever logo.\nOpen a non-vanilla quest in the Map & Quest Log to preview changes, or use Preview below to try it on any quest.")
 sub:SetJustifyH("LEFT")
 
 -- Independent on/off options
@@ -34,10 +42,11 @@ local function MakeCheck(label, key, anchor, x, y)
 end
 local showTint = MakeCheck("Tint the parchment teal", "showTint", sub, -4, -16)
 local showLogo = MakeCheck("Add the WoW Forever logo above the quest text", "showLogo", showTint, 0, -2)
+local questieTint = MakeCheck("Tint the ! and ? map icons", "questieTint", showLogo, 0, -2)
 
 -- Colour swatch
 local colorLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-colorLabel:SetPoint("TOPLEFT", showLogo, "BOTTOMLEFT", 4, -20)
+colorLabel:SetPoint("TOPLEFT", questieTint, "BOTTOMLEFT", 4, -20)
 colorLabel:SetText("Tint colour")
 
 local swatch = CreateFrame("Button", nil, panel)
@@ -130,9 +139,10 @@ markerHeader:SetPoint("TOPLEFT", panel, "TOPLEFT", 340, -110)
 markerHeader:SetText("Quest name marker")
 
 local marker = MakeCheck("Mark quests in log and tracker", "marker", markerHeader, -4, -8)
+local trackerLogo = MakeCheck("Add the logo beside quests in the tracker", "trackerLogo", marker, 0, -2)
 
 local symbolLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-symbolLabel:SetPoint("TOPLEFT", marker, "BOTTOMLEFT", 4, -14)
+symbolLabel:SetPoint("TOPLEFT", trackerLogo, "BOTTOMLEFT", 4, -14)
 symbolLabel:SetText("Symbol")
 
 local symbol = CreateFrame("EditBox", nil, panel, "InputBoxTemplate")
@@ -205,6 +215,23 @@ local iconHeightSlider = widgets.markerHeight
 MakeSlider("Icon vertical position", "markerOffset", -8, 8, 1, " px", iconHeightSlider)
 MakeSlider("Icon spacing from the name", "markerGap", 0, 12, 1, " px", widgets.markerOffset)
 
+-- Preview: a testing aid that forces the tint, logo and marker on or off for every quest
+-- (right column, under the marker sliders). Also /fqt preview on|off|auto.
+local previewHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+previewHeader:SetPoint("TOPLEFT", widgets.markerGap, "BOTTOMLEFT", 0, -28)
+previewHeader:SetText("Preview")
+
+local previewButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+previewButton:SetSize(140, 24)
+previewButton:SetPoint("TOPLEFT", previewHeader, "BOTTOMLEFT", 0, -10)
+previewButton:SetText("Change preview")
+previewButton:SetScript("OnClick", function() ns.SetPreview() end)
+
+local previewText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+previewText:SetPoint("TOPLEFT", previewButton, "BOTTOMLEFT", 0, -8)
+previewText:SetWidth(260)
+previewText:SetJustifyH("LEFT")
+
 
 -- Objective lines: optional recolour for non-vanilla quests (left column, under the sliders)
 local objHeader = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -271,7 +298,9 @@ function Sync()
     local c = ns.cfg
     widgets.showTint:SetChecked(c.showTint)
     widgets.showLogo:SetChecked(c.showLogo)
+    widgets.questieTint:SetChecked(c.questieTint)
     widgets.marker:SetChecked(c.marker)
+    widgets.trackerLogo:SetChecked(c.trackerLogo)
     widgets.markerUseTint:SetChecked(c.markerUseTint)
     widgets.markerAtStart:SetChecked(c.markerAtStart)
     widgets.markerIcon:SetChecked(c.markerIcon)
@@ -285,8 +314,11 @@ function Sync()
     for _, key in ipairs({ "alpha", "topAlpha", "height", "markerHeight", "markerOffset", "markerGap" }) do
         widgets[key]:SetValue(math.floor(c[key] * sliderScale[key] + 0.5))
     end
+    previewText:SetText("Tint is " .. (ns.PREVIEW_TEXT[c.preview] or tostring(c.preview))
+        .. ".\nFor testing only: \"auto\" is the normal behaviour.")
     syncing = false
 end
+ns.SyncOptions = Sync
 
 reset:SetScript("OnClick", function()
     for k, v in pairs(ns.defaults) do
@@ -302,19 +334,37 @@ end)
 
 panel:SetScript("OnShow", Sync)
 
+-- Width follows the window; height reaches the lowest option (both columns) plus a margin.
+local CONTENT_MARGIN = 20
+local function FitContent()
+    panel:SetWidth(math.max(1, scroll:GetWidth()))
+    local top = panel:GetTop()
+    local lowest
+    for _, region in ipairs({ reset, previewText }) do
+        local bottom = region:GetBottom()
+        if bottom and (not lowest or bottom < lowest) then lowest = bottom end
+    end
+    if top and lowest then panel:SetHeight(top - lowest + CONTENT_MARGIN) end
+end
+scroll:HookScript("OnSizeChanged", FitContent)
+canvas:HookScript("OnShow", function()
+    FitContent()
+    C_Timer.After(0, FitContent) -- once the window has laid the canvas out
+end)
+
 local category
 if Settings and Settings.RegisterCanvasLayoutCategory then
-    category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
+    category = Settings.RegisterCanvasLayoutCategory(canvas, canvas.name)
     Settings.RegisterAddOnCategory(category)
 elseif InterfaceOptions_AddCategory then
-    InterfaceOptions_AddCategory(panel)
+    InterfaceOptions_AddCategory(canvas)
 end
 
 function ns.OpenOptions()
     if Settings and Settings.OpenToCategory and category then
         Settings.OpenToCategory(category:GetID())
     elseif InterfaceOptionsFrame_OpenToCategory then
-        InterfaceOptionsFrame_OpenToCategory(panel)
-        InterfaceOptionsFrame_OpenToCategory(panel)
+        InterfaceOptionsFrame_OpenToCategory(canvas)
+        InterfaceOptionsFrame_OpenToCategory(canvas)
     end
 end

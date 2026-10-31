@@ -1,0 +1,16 @@
+# Development only: lets this folder load on Burning Crusade Anniversary, to test the Questie map icon tint
+# against Questie's full TBC data (TBC quests count as non-vanilla). TBC prefers this file over
+# ForeverQuestTint.toc. Not packaged (see .pkgmeta). Keep everything below the interface line in step
+# with ForeverQuestTint.toc.
+## Interface: 20506
+## Title: Forever Quest Tint
+## Notes: Tints the quest window teal and marks quest names for quests that were not in original Classic.
+## Author: xanastar
+## Version: 0.7.0
+## IconTexture: Interface\AddOns\ForeverQuestTint\Media\ForeverLogo
+## SavedVariables: ForeverQuestTintDB
+## OptionalDeps: DialogueUI, Immersion, Storyline, Lorewalker, Questie, ClassicUIForever, EllesmereUI, EllesmereUIQuestTracker
+
+VanillaQuests.lua
+ForeverQuestTint.lua
+Options.lua
