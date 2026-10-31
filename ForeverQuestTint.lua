@@ -576,114 +576,6 @@ local function HookDUI()
     RefreshDUI()
 end
 
--- Immersion (addon) shows quest text in ImmersionFrame.TalkBox, over a dark "talking head" box:
--- BackgroundFrame.TextBackground, or SolidBackground when its solid background option is on.
--- A tinted copy of that near-black art would stay black, so draw a flat teal glow instead, masked
--- to the box's own shape. ImmersionFrame.lastEvent says what the box is showing; gossip is left alone.
-local IMM_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
-local IMM_SCALE = 0.75 -- brightness of the teal glow...
-local IMM_ALPHA = 0.6  -- ...and its strength relative to cfg.alpha (lower = subtler)
-local IMM_LOGO_SIZE = 30
-local IMM_LOGO_X, IMM_LOGO_Y = -24, -10 -- from the top-right corner of the box (negative = in, lower)
-local imm = {} -- glow texture, its mask, the logo, and the key the glow was last drawn for
-
-local function HideImmersion()
-    imm.key = nil
-    if imm.glow then imm.glow:Hide() end
-    if imm.logo then imm.logo:Hide() end
-end
-
-local function ApplyImmersionGlow(parent, bg)
-    local cfg = ns.cfg
-    local atlas, height = bg:GetAtlas(), bg:GetHeight()
-    if not height or height <= 0 then
-        imm.key = nil
-        if imm.glow then imm.glow:Hide() end
-        return
-    end
-    local key = ("%d:%s:%s:%.1f"):format(ns.rev, tostring(bg), tostring(atlas), height)
-    if imm.key == key and imm.glow:IsShown() then return end
-    imm.key = key
-    if not imm.glow then
-        imm.glow = parent:CreateTexture(nil, "BACKGROUND", nil, 2)
-        imm.mask = parent:CreateMaskTexture()
-        imm.glow:AddMaskTexture(imm.mask)
-    end
-    local glow, mask = imm.glow, imm.mask
-    mask:ClearAllPoints()
-    mask:SetAllPoints(bg)
-    if atlas then mask:SetAtlas(atlas) else mask:SetTexture(bg:GetTexture()) end
-    glow:ClearAllPoints()
-    glow:SetPoint("BOTTOMLEFT", bg, "BOTTOMLEFT")
-    glow:SetPoint("BOTTOMRIGHT", bg, "BOTTOMRIGHT")
-    glow:SetHeight(height * cfg.height)
-    local c = cfg.tint
-    glow:SetColorTexture(1, 1, 1, 1)
-    glow:SetBlendMode("ADD")
-    glow:SetGradient("VERTICAL",
-        CreateColor(c[1] * IMM_SCALE, c[2] * IMM_SCALE, c[3] * IMM_SCALE, cfg.alpha * IMM_ALPHA),
-        CreateColor(c[1] * IMM_SCALE, c[2] * IMM_SCALE, c[3] * IMM_SCALE, cfg.topAlpha * IMM_ALPHA))
-    glow:Show()
-end
-
-local function ApplyImmersionLogo(box, bg, show)
-    if not show then
-        if imm.logo then imm.logo:Hide() end
-        return
-    end
-    if not imm.logo then
-        imm.logo = CreateFrame("Frame", nil, box)
-        imm.logo:SetFrameLevel(math.min(box:GetFrameLevel() + 50, 9999))
-        imm.logo:SetSize(IMM_LOGO_SIZE, IMM_LOGO_SIZE)
-        imm.logo.texture = imm.logo:CreateTexture(nil, "OVERLAY")
-        imm.logo.texture:SetAllPoints()
-        imm.logo.texture:SetTexture(LOGO_PATH)
-    end
-    imm.logo:ClearAllPoints()
-    imm.logo:SetPoint("TOPRIGHT", bg, "TOPRIGHT", IMM_LOGO_X, IMM_LOGO_Y)
-    imm.logo:Show()
-end
-
-local function RefreshImmersion()
-    local frame = _G.ImmersionFrame
-    local box = frame and frame.TalkBox
-    local bgFrame = box and box.BackgroundFrame
-    if not bgFrame or not bgFrame.TextBackground then return end
-    if not (frame:IsVisible() and box:IsVisible() and IMM_EVENTS[frame.lastEvent] and IsMarked(GetQuestID())) then
-        if imm.glow or imm.logo then HideImmersion() end
-        return
-    end
-    local solid = bgFrame.SolidBackground
-    local bg = solid and solid:IsShown() and solid or bgFrame.TextBackground
-    if ns.cfg.showTint then
-        ApplyImmersionGlow(bgFrame, bg)
-    else
-        imm.key = nil
-        if imm.glow then imm.glow:Hide() end
-    end
-    ApplyImmersionLogo(box, bg, ns.cfg.showLogo)
-end
-
--- Immersion switches between gossip and quest text without hiding the box, so refresh after each
--- of its events (and once more on the next frame, after its own animations have set up).
-local immHooked = false
-local function HookImmersion()
-    local frame = _G.ImmersionFrame
-    if immHooked or not frame or not frame.TalkBox or not frame.HookScript then return end
-    immHooked = true
-    local function refreshSoon()
-        RefreshImmersion()
-        C_Timer.After(0, RefreshImmersion)
-    end
-    frame:HookScript("OnEvent", refreshSoon)
-    frame:HookScript("OnShow", refreshSoon)
-    frame:HookScript("OnHide", RefreshImmersion)
-    frame.TalkBox:HookScript("OnShow", refreshSoon)
-    frame.TalkBox:HookScript("OnHide", RefreshImmersion)
-    frame.TalkBox:HookScript("OnSizeChanged", RefreshImmersion)
-    RefreshImmersion()
-end
-
 -- A flat teal wash over the bottom of a page whose art can't simply be copied (sliced art, or a window's art in
 -- pieces), like the Black contrast setting's glow above: brightness `scale` and strength `strength` (relative to
 -- cfg.alpha). An optional mask (file and texture coordinates) trims it to the page's own outline. Drawn one
@@ -751,6 +643,57 @@ local function ApplyBadge(key, anchor, show, point, relPoint, x, y, size)
     badge:ClearAllPoints()
     badge:SetPoint(point, anchor, relPoint, x, y)
     badge:Show()
+end
+
+-- Immersion (addon): quest text in ImmersionFrame.TalkBox (its "talking head"), with the quest's objectives and
+-- rewards in a dark panel below it, TalkBox.Elements: a backdrop with 16px edges that Immersion shows only for
+-- quests and resizes to its contents. The glow goes in that panel, inside its edges so it follows the panel's
+-- shape, and the logo in its top-right corner (the talking head's corner holds Immersion's own buttons).
+-- ImmersionFrame.lastEvent says what is showing; gossip is left alone.
+local IMM_EVENTS = { QUEST_DETAIL = true, QUEST_PROGRESS = true, QUEST_COMPLETE = true }
+local IMM_INSET = 14                     -- inside the panel's edge pieces
+local IMM_SCALE, IMM_ALPHA = 0.75, 0.6   -- a deeper teal glow on the dark panel
+local IMM_LOGO_SIZE = 24
+local IMM_LOGO_X, IMM_LOGO_Y = -18, -14  -- from the panel's top-right, level with its first heading
+
+local immInner -- the panel's inside, for the glow to cover
+local function RefreshImmersion()
+    local frame = _G.ImmersionFrame
+    local panel = frame and frame.TalkBox and frame.TalkBox.Elements
+    if not panel then return end
+    local show = frame:IsVisible() and panel:IsVisible() and IMM_EVENTS[frame.lastEvent] and IsMarked(GetQuestID())
+    if show and ns.cfg.showTint then
+        if not immInner then
+            immInner = CreateFrame("Frame", nil, panel)
+            immInner:SetPoint("TOPLEFT", IMM_INSET, -IMM_INSET)
+            immInner:SetPoint("BOTTOMRIGHT", -IMM_INSET, IMM_INSET)
+        end
+        ApplyFlat("immersion", panel, immInner, IMM_SCALE, IMM_ALPHA)
+    else
+        HideFlat("immersion")
+    end
+    ApplyBadge("immersion", panel, show and ns.cfg.showLogo, "TOPRIGHT", "TOPRIGHT", IMM_LOGO_X, IMM_LOGO_Y, IMM_LOGO_SIZE)
+end
+
+-- Immersion switches between gossip and quest text without hiding its window, so refresh after each of its
+-- events (and once more on the next frame, once it has laid out the panel).
+local immHooked = false
+local function HookImmersion()
+    local frame = _G.ImmersionFrame
+    local panel = frame and frame.TalkBox and frame.TalkBox.Elements
+    if immHooked or not panel or not frame.HookScript then return end
+    immHooked = true
+    local function refreshSoon()
+        RefreshImmersion()
+        C_Timer.After(0, RefreshImmersion)
+    end
+    frame:HookScript("OnEvent", refreshSoon)
+    frame:HookScript("OnShow", refreshSoon)
+    frame:HookScript("OnHide", RefreshImmersion)
+    panel:HookScript("OnShow", refreshSoon)
+    panel:HookScript("OnHide", RefreshImmersion)
+    panel:HookScript("OnSizeChanged", RefreshImmersion) -- it grows to fit the objectives and rewards
+    RefreshImmersion()
 end
 
 -- Lorewalker (addon), Classic mode: quest text in LWDialogFrame, on a page drawn by ContentFrame.BackgroundTexture
