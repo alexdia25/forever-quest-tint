@@ -940,13 +940,14 @@ end
 -- holding its quest in data.Id. Questie colours an icon's texture through SetVertexColor, a wrapper of its own that
 -- remembers the colour it asked for in texture.r/g/b/a and reuses it when it fades icons. For a marked quest the
 -- yellow ! (available) and ? (ready to turn in) get a gradient like the quest window's: over Questie's own icon, a
--- desaturated copy of it in the vivid tint, solid at the bottom and fading out towards the top, so the icon is teal
--- below and its own yellow above. Questie's icon itself is never changed; the copy follows its alpha (minimap
+-- desaturated copy of it in the vivid tint, solid over the lower part and fading out quickly above it, so the icon is
+-- teal below and its own clean yellow above (a long, even blend left a muddy olive middle, yellow and teal mixing). Questie's icon itself is never changed; the copy follows its alpha (minimap
 -- fading) and hides while Questie shows anything but plain white (its hover highlight). Questie's grey, blue, event
 -- and PvP icons are left alone. Questie's frames and modules are its internals, so each is checked before use.
 local QUESTIE_ICON_TYPES = { "ICON_TYPE_AVAILABLE", "ICON_TYPE_COMPLETE" }
 local QUESTIE_BRIGHTNESS = 1.15 -- the desaturated yellow is darker than the icon; lift the tint a little
-local QUESTIE_TOP = 0.15        -- the copy's strength at the top of the icon (0 = the original yellow shows fully)
+local QUESTIE_SOLID = 0.45      -- the copy is solid over the bottom 45% of the icon...
+local QUESTIE_FADE = 0.75       -- ...fading out by 75% of the way up; Questie's own yellow above
 local questieFrames = {}
 
 local function QuestieTintable(frame)
@@ -963,26 +964,38 @@ local function ApplyQuestieTint(frame)
     if not tex or not tex.OLDSetVertexColor then return end
     local plain = (tex.r or 1) == 1 and (tex.g or 1) == 1 and (tex.b or 1) == 1
     local data = frame.data
-    local copy = frame.fqtCopy
-    if ns.cfg.questieTint and plain and data and IsMarked(data.Id) and QuestieTintable(frame) then
-        if not copy then
+    local solid, fade = frame.fqtSolid, frame.fqtFade
+    local height = tex:GetHeight()
+    if ns.cfg.questieTint and plain and data and IsMarked(data.Id) and QuestieTintable(frame) and height and height > 0 then
+        if not solid then
             -- Above Questie's icon (OVERLAY 0), level with its starter overlay, which is drawn outside the icon's shape.
-            copy = frame:CreateTexture(nil, "OVERLAY", nil, 1)
-            copy:SetAllPoints(tex)
-            frame.fqtCopy = copy
+            solid = frame:CreateTexture(nil, "OVERLAY", nil, 1)
+            fade = frame:CreateTexture(nil, "OVERLAY", nil, 1)
+            frame.fqtSolid, frame.fqtFade = solid, fade
         end
         -- The vivid tint: the plain one, desaturated, came out a pale grey-cyan close to the map's own colours.
         local c = VividTint(ns.cfg.tint)
         local r, g, b = math.min(1, c[1] * QUESTIE_BRIGHTNESS), math.min(1, c[2] * QUESTIE_BRIGHTNESS),
             math.min(1, c[3] * QUESTIE_BRIGHTNESS)
         local a = tex.a or 1
-        copy:SetTexture(frame.fqtIcon)
-        copy:SetTexCoord(tex:GetTexCoord())
-        copy:SetDesaturated(true)
-        copy:SetGradient("VERTICAL", CreateColor(r, g, b, a), CreateColor(r, g, b, a * QUESTIE_TOP))
-        copy:Show()
-    elseif copy then
-        copy:Hide()
+        local ulx, uly, _, _, _, _, lrx, lry = tex:GetTexCoord()
+        -- A horizontal slice of the icon, from `from` to `to` of the way up, with its matching texture coordinates.
+        local function slice(piece, from, to, alphaLow, alphaHigh)
+            piece:ClearAllPoints()
+            piece:SetPoint("BOTTOMLEFT", tex, "BOTTOMLEFT", 0, height * from)
+            piece:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", 0, height * from)
+            piece:SetHeight(height * (to - from))
+            piece:SetTexture(frame.fqtIcon)
+            piece:SetTexCoord(ulx, lrx, lry + (uly - lry) * to, lry + (uly - lry) * from)
+            piece:SetDesaturated(true)
+            piece:SetGradient("VERTICAL", CreateColor(r, g, b, alphaLow), CreateColor(r, g, b, alphaHigh))
+            piece:Show()
+        end
+        slice(solid, 0, QUESTIE_SOLID, a, a)
+        slice(fade, QUESTIE_SOLID, QUESTIE_FADE, a, 0)
+    elseif solid then
+        solid:Hide()
+        fade:Hide()
     end
 end
 
