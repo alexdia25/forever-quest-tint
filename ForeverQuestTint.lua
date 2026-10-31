@@ -939,11 +939,14 @@ end
 -- Questie (addon): its quest icons on the world map and minimap. Each is a pooled frame named QuestieFrame<n>,
 -- holding its quest in data.Id. Questie colours an icon's texture through SetVertexColor, a wrapper of its own that
 -- remembers the colour it asked for in texture.r/g/b/a and reuses it when it fades icons. For a marked quest the
--- yellow ! (available) and ? (ready to turn in) are desaturated and drawn in the vivid tint; Questie's grey, blue,
--- event and PvP icons keep their colours and meaning. When Questie asks for anything but plain white (its hover
--- highlight), its colour wins. Questie's frames and modules are its internals, so each is checked before use.
+-- yellow ! (available) and ? (ready to turn in) get a gradient like the quest window's: over Questie's own icon, a
+-- desaturated copy of it in the vivid tint, solid at the bottom and fading out towards the top, so the icon is teal
+-- below and its own yellow above. Questie's icon itself is never changed; the copy follows its alpha (minimap
+-- fading) and hides while Questie shows anything but plain white (its hover highlight). Questie's grey, blue, event
+-- and PvP icons are left alone. Questie's frames and modules are its internals, so each is checked before use.
 local QUESTIE_ICON_TYPES = { "ICON_TYPE_AVAILABLE", "ICON_TYPE_COMPLETE" }
-local QUESTIE_BRIGHTNESS = 1.25 -- the desaturated yellow is darker than the icon was; lift the tint back up
+local QUESTIE_BRIGHTNESS = 1.15 -- the desaturated yellow is darker than the icon; lift the tint a little
+local QUESTIE_TOP = 0.15        -- the copy's strength at the top of the icon (0 = the original yellow shows fully)
 local questieFrames = {}
 
 local function QuestieTintable(frame)
@@ -960,17 +963,26 @@ local function ApplyQuestieTint(frame)
     if not tex or not tex.OLDSetVertexColor then return end
     local plain = (tex.r or 1) == 1 and (tex.g or 1) == 1 and (tex.b or 1) == 1
     local data = frame.data
+    local copy = frame.fqtCopy
     if ns.cfg.questieTint and plain and data and IsMarked(data.Id) and QuestieTintable(frame) then
+        if not copy then
+            -- Above Questie's icon (OVERLAY 0), level with its starter overlay, which is drawn outside the icon's shape.
+            copy = frame:CreateTexture(nil, "OVERLAY", nil, 1)
+            copy:SetAllPoints(tex)
+            frame.fqtCopy = copy
+        end
         -- The vivid tint: the plain one, desaturated, came out a pale grey-cyan close to the map's own colours.
         local c = VividTint(ns.cfg.tint)
-        tex:SetDesaturated(true)
-        tex:OLDSetVertexColor(math.min(1, c[1] * QUESTIE_BRIGHTNESS), math.min(1, c[2] * QUESTIE_BRIGHTNESS),
-            math.min(1, c[3] * QUESTIE_BRIGHTNESS), tex.a or 1)
-        frame.fqtTinted = true
-    elseif frame.fqtTinted then
-        frame.fqtTinted = nil
-        tex:SetDesaturated(false)
-        tex:OLDSetVertexColor(tex.r or 1, tex.g or 1, tex.b or 1, tex.a or 1)
+        local r, g, b = math.min(1, c[1] * QUESTIE_BRIGHTNESS), math.min(1, c[2] * QUESTIE_BRIGHTNESS),
+            math.min(1, c[3] * QUESTIE_BRIGHTNESS)
+        local a = tex.a or 1
+        copy:SetTexture(frame.fqtIcon)
+        copy:SetTexCoord(tex:GetTexCoord())
+        copy:SetDesaturated(true)
+        copy:SetGradient("VERTICAL", CreateColor(r, g, b, a), CreateColor(r, g, b, a * QUESTIE_TOP))
+        copy:Show()
+    elseif copy then
+        copy:Hide()
     end
 end
 
@@ -1631,8 +1643,31 @@ local function MarkQuestieLine(line)
     label.fqtRemarking = nil
 end
 
+local function RefreshQuestieTracker()
+    for _, line in ipairs(questieLines) do
+        if line:IsShown() then MarkQuestieLine(line) end
+    end
+end
+
+-- Questie builds its tracker once it is ready, a moment after login, and writes the titles straight away: so once
+-- hooked, the titles already showing are marked too (otherwise they stayed plain until Questie next rewrote them).
+local questieReadyHooked = false
 local function HookQuestieTracker()
-    if #questieLines > 0 or type(QuestieLoader) ~= "table" then return end
+    if type(QuestieLoader) ~= "table" then return end
+    local api = type(Questie) == "table" and Questie.API
+    if not questieReadyHooked and type(api) == "table" and type(api.RegisterOnReady) == "function" then
+        questieReadyHooked = true
+        -- Its tracker draws its first titles just after: look again a moment later as well.
+        local function catchUp()
+            HookQuestieTracker()
+            RefreshQuestieTracker()
+        end
+        pcall(api.RegisterOnReady, function()
+            C_Timer.After(0, catchUp)
+            C_Timer.After(2, catchUp)
+        end)
+    end
+    if #questieLines > 0 then return end
     local i = 1
     while true do
         local line = _G["linePool" .. i]
@@ -1643,12 +1678,7 @@ local function HookQuestieTracker()
         end)
         i = i + 1
     end
-end
-
-local function RefreshQuestieTracker()
-    for _, line in ipairs(questieLines) do
-        if line:IsShown() then MarkQuestieLine(line) end
-    end
+    RefreshQuestieTracker()
 end
 
 local listHooked, trackerHooked, eventsHooked = false, false, false
