@@ -583,13 +583,16 @@ end
 -- cover them goes on BORDER too. With `vivid`, the tint is pushed away from grey first (VividTint), for dark panels
 -- where the plain tint reads as grey.
 --
--- With `corner`, the glow takes a panel's shape: rounded bottom corners and a soft rim, from Media/GlowCorner.tga
--- (logo/make_glow_corner.py), the bottom-left of a soft-edged rounded rectangle. `corner` is the size its 32x32
--- corner quadrant is drawn at; in that size the rim is 10/32 of it and the corner's radius 22/32. `region` is the
+-- With `corner`, the glow takes a panel's shape: shaped bottom corners and a soft rim, from corner art made by
+-- logo/make_glow_corner.py: Media/GlowCorner.tga (the default) is the bottom-left of a soft-edged rounded rectangle,
+-- its rim 10/32 of the corner piece and its radius 22/32; Media/GlowChamfer.tga (`art`) has its corners cut off at
+-- 45 degrees, its rim 5/32 and its cut 22/32 along each side. `corner` is the size the art's 32x32 corner quadrant
+-- is drawn at. `region` is the
 -- glow's outer edge, where the rim has faded out. Six pieces, each carrying its share of the vertical fade: the two
 -- bottom corners, the bottom edge between them and the two sides above them (stretched from the straight parts of
 -- the art), and the plain centre.
 local GLOW_CORNER = "Interface\\AddOns\\ForeverQuestTint\\Media\\GlowCorner.tga"
+local GLOW_CHAMFER = "Interface\\AddOns\\ForeverQuestTint\\Media\\GlowChamfer.tga"
 local GLOW_CORNER_UV = { 0, 0.5, 0.5, 1 }               -- the bottom-left 32x32 quadrant
 local GLOW_BOTTOM_UV = { 0.74, 0.76, 0.5, 1 }           -- a column through the straight bottom edge
 local GLOW_SIDE_UV = { 0, 0.5, 0.23, 0.25 }             -- a row through the straight left edge
@@ -613,7 +616,7 @@ local function FlatColourAt(key, y)
     return c[1], c[2], c[3], math.max(0, math.min(1, ov.fqtAlphaAt(y - bottom)))
 end
 
-local function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer, vivid)
+local function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer, vivid, art)
     local cfg = ns.cfg
     local height = region and region:GetHeight()
     local fade = height and height * cfg.height
@@ -662,7 +665,7 @@ local function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer
     ov:Hide()
     local width = region:GetWidth() or 0
     local size = math.min(corner, fade, width / 2)
-    local function art(i, uv, mirror, left, right, y0, y1)
+    local function piece(i, uv, mirror, left, right, y0, y1)
         local tex = ov.fqtPieces[i]
         if not tex then
             tex = parent:CreateTexture(nil, layer, nil, sublevel)
@@ -674,7 +677,7 @@ local function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer
         tex:SetPoint("BOTTOMRIGHT", region, "BOTTOMRIGHT", -right, y0)
         tex:SetHeight(y1 - y0)
         if uv then
-            tex:SetTexture(GLOW_CORNER)
+            tex:SetTexture(art or GLOW_CORNER)
             if mirror then
                 tex:SetTexCoord(uv[2], uv[1], uv[3], uv[4])
             else
@@ -687,12 +690,12 @@ local function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer
         tex:Show()
     end
     local mid = width - 2 * size
-    art(1, GLOW_CORNER_UV, false, 0, width - size, 0, size)        -- bottom-left corner
-    art(2, GLOW_CORNER_UV, true, width - size, 0, 0, size)         -- bottom-right corner
-    art(3, GLOW_BOTTOM_UV, false, size, size, 0, size)             -- bottom edge
-    art(4, GLOW_SIDE_UV, false, 0, width - size, size, fade)       -- left side
-    art(5, GLOW_SIDE_UV, true, width - size, 0, size, fade)        -- right side
-    art(6, nil, false, size, size, size, fade)                     -- centre
+    piece(1, GLOW_CORNER_UV, false, 0, width - size, 0, size)        -- bottom-left corner
+    piece(2, GLOW_CORNER_UV, true, width - size, 0, 0, size)         -- bottom-right corner
+    piece(3, GLOW_BOTTOM_UV, false, size, size, 0, size)             -- bottom edge
+    piece(4, GLOW_SIDE_UV, false, 0, width - size, size, fade)       -- left side
+    piece(5, GLOW_SIDE_UV, true, width - size, 0, size, fade)        -- right side
+    piece(6, nil, false, size, size, size, fade)                     -- centre
     -- A panel too narrow for a middle has nothing between its corners.
     if mid <= 0 then ov.fqtPieces[3]:Hide(); ov.fqtPieces[6]:Hide() end
     if fade <= size then ov.fqtPieces[4]:Hide(); ov.fqtPieces[5]:Hide(); ov.fqtPieces[6]:Hide() end
@@ -777,7 +780,8 @@ end
 
 -- Lorewalker (addon), Classic mode: quest text in LWDialogFrame, on a page drawn by ContentFrame.BackgroundTexture
 -- (a frame holding the real, sliced texture in __Texture, on ARTWORK). Its QuestFrame part is shown only for
--- quests, not gossip. The glow is the soft rounded one, inset from the page's torn edges, above the page texture.
+-- quests, not gossip. The glow has the page's shape, its corners cut off at 45 degrees like the page's, inset from
+-- the page's torn edges, above the page texture.
 -- Lorewalker gives quests it considers new to Forever a page of its own; the tint and logo follow this addon's list.
 -- Its Immersive and Story modes have no page, so they are left alone.
 --
@@ -786,7 +790,8 @@ end
 -- It has to stay above the text, so instead of moving it, it is recoloured to the glowing page's colour at its
 -- height (the page colour blended with the glow, as the glow blends it), and given back its own colour after.
 local LW_INSET = 10                           -- the glow's outer edge, inside the page's torn edges
-local LW_CORNER = 12                          -- corner piece size: radius ~8, rim ~4
+local LW_CORNER = 22                          -- chamfered corner piece size: a cut of ~15 along each side
+                                              -- (parallel to the page's own 45 degree corners), rim ~3.5
 local LW_SCALE, LW_ALPHA = 1, 0.55            -- light pages: a vivid tint, a little over half strength
 local LW_DARK_SCALE, LW_DARK_ALPHA = 0.75, 0.6 -- Dark theme: a deeper glow
 local LW_LOGO_SIZE = 24
@@ -845,7 +850,7 @@ local function RefreshLorewalker()
         end
         local dark = LorewalkerDark(page.__Texture)
         ApplyFlat("lorewalker", page, lwInner, dark and LW_DARK_SCALE or LW_SCALE, dark and LW_DARK_ALPHA or LW_ALPHA,
-            LW_CORNER, "ARTWORK", true)
+            LW_CORNER, "ARTWORK", true, GLOW_CHAMFER)
         TintLorewalkerEdgeFade(frame, true)
     else
         HideFlat("lorewalker")
