@@ -63,6 +63,8 @@ Nothing to configure: the addon detects these on its own (`/fqt status` shows wh
 | Immersion | Storyline |
 | --- | --- |
 | ![Immersion's quest objectives panel with the teal glow](screenshots/immersion.png) | ![Storyline's speech bubble with the teal glow](screenshots/storyline.webp) |
+| **Lorewalker** (Dark theme) | |
+| ![Lorewalker's quest page with the teal glow](screenshots/lorewalker.png) | |
 
 Using another quest or tracker addon? Open an issue with its name.
 
