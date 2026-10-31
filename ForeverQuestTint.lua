@@ -181,6 +181,7 @@ local SKIN_SCROLL = { -- each quest window panel's text area
     QuestFrameGreetingPanel = "QuestGreetingScrollFrame",
 }
 local skinRegions = setmetatable({}, { __mode = "k" })
+local skinKeys = setmetatable({}, { __mode = "k" }) -- each parchment's glow key, built once
 
 local function IsSkinned(tex)
     if (tex:GetAlpha() or 1) < 0.05 then return true end
@@ -209,9 +210,12 @@ local function SkinRegion(tex)
             end
             local dx = rewardsRight and rewardsRight < texRight and rewardsRight - texRight or 0
             local dy = rewardsTop and rewardsTop > texBottom and rewardsTop < texTop and rewardsTop - texBottom or 0
-            region:ClearAllPoints()
-            region:SetPoint("TOPLEFT", tex, "TOPLEFT")
-            region:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", dx, dy)
+            if region.fqtAnchor ~= tex or region.fqtX ~= dx or region.fqtY ~= dy then
+                region.fqtAnchor, region.fqtX, region.fqtY = tex, dx, dy
+                region:ClearAllPoints()
+                region:SetPoint("TOPLEFT", tex, "TOPLEFT")
+                region:SetPoint("BOTTOMRIGHT", tex, "BOTTOMRIGHT", dx, dy)
+            end
             return region
         end
     end
@@ -224,9 +228,13 @@ local function SkinRegion(tex)
         region = CreateFrame("Frame", nil, parent)
         skinRegions[tex] = region
     end
-    region:ClearAllPoints()
-    region:SetPoint("TOPLEFT", scroll, "TOPLEFT", wl + SKIN_PAD - sl, 0)
-    region:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", wr - SKIN_PAD - sr, 0)
+    local left, right = wl + SKIN_PAD - sl, wr - SKIN_PAD - sr
+    if region.fqtAnchor ~= scroll or region.fqtX ~= left or region.fqtY ~= right then
+        region.fqtAnchor, region.fqtX, region.fqtY = scroll, left, right
+        region:ClearAllPoints()
+        region:SetPoint("TOPLEFT", scroll, "TOPLEFT", left, 0)
+        region:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", right, 0)
+    end
     return region
 end
 ns.rev = 0 -- bumped by ns.Reapply; invalidates the cached overlay geometry
@@ -235,7 +243,11 @@ local function ApplyOverlay(tex, tinted, noLogo)
     local ov = overlays[tex]
     ApplyLogo(tex, tinted and ns.cfg.showLogo and not noLogo)
     tinted = tinted and ns.cfg.showTint
-    local skinKey = "skin" .. tostring(tex)
+    local skinKey = skinKeys[tex]
+    if not skinKey then
+        skinKey = "skin" .. tostring(tex)
+        skinKeys[tex] = skinKey
+    end
     if not tinted then
         if ov then ov:Hide() end
         HideFlat(skinKey)
@@ -702,6 +714,14 @@ function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer, vivi
         return
     end
     local ov = flats[key]
+    -- Called up to 20 times a second (the quest log's keeper): stop here when nothing it depends on has changed.
+    local width = region:GetWidth()
+    local last = ov and ov.fqtLast
+    if last and ov.fqtShown and last.rev == ns.rev and last.region == region and last.height == height
+        and last.width == width and last.scale == scale and last.strength == strength and last.corner == corner
+        and last.drawLayer == drawLayer and last.vivid == vivid and last.art == art then
+        return
+    end
     if not ov then
         ov = parent:CreateTexture(nil, drawLayer or "BACKGROUND", nil, 7)
         ov.fqtPieces = {}
@@ -736,11 +756,13 @@ function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer, vivi
         place(ov, 0, 0, 0, fade)
         ov:SetGradient("VERTICAL", colour(alphaAt(0)), colour(alphaAt(fade)))
         for _, tex in ipairs(ov.fqtPieces) do tex:Hide() end
+        ov.fqtLast = { rev = ns.rev, region = region, height = height, width = width, scale = scale,
+            strength = strength, corner = corner, drawLayer = drawLayer, vivid = vivid, art = art }
         return
     end
 
     ov:Hide()
-    local width = region:GetWidth() or 0
+    width = width or 0
     local size = math.min(corner, fade, width / 2)
     local function piece(i, uv, mirror, left, right, y0, y1)
         local tex = ov.fqtPieces[i]
@@ -777,6 +799,8 @@ function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer, vivi
     if mid <= 0 then ov.fqtPieces[3]:Hide(); ov.fqtPieces[6]:Hide() end
     if fade <= size then ov.fqtPieces[4]:Hide(); ov.fqtPieces[5]:Hide(); ov.fqtPieces[6]:Hide() end
     for i = 7, #ov.fqtPieces do ov.fqtPieces[i]:Hide() end
+    ov.fqtLast = { rev = ns.rev, region = region, height = height, width = width, scale = scale,
+        strength = strength, corner = corner, drawLayer = drawLayer, vivid = vivid, art = art }
 end
 
 -- The logo as a small badge on `anchor`, created on first use and kept per key.
@@ -967,6 +991,9 @@ end
 -- its art (`file` and the art's texture coordinates l, r, t, b) in the vivid tint, solid over the bottom
 -- QUESTIE_SOLID of the icon at strength `alpha`, fading out by QUESTIE_FADE; drawn on `owner` in `layer`/`sublevel`.
 -- `height` is the icon's height. The two copy textures live on `owner`; show = false hides them.
+--
+-- Questie fades minimap icons up to ten times a second, so what was drawn is remembered on `owner`: when only the
+-- strength changed, just the gradients are updated, through colour objects kept for reuse (no new tables).
 local function ApplyIconGradient(owner, tex, show, file, l, r, t, b, height, alpha, layer, sublevel)
     local solid, fade = owner.fqtSolid, owner.fqtFade
     if not (show and file and height and height > 0) then
@@ -974,19 +1001,36 @@ local function ApplyIconGradient(owner, tex, show, file, l, r, t, b, height, alp
             solid:Hide()
             fade:Hide()
         end
+        if owner.fqtDrawn then owner.fqtDrawn.rev = nil end -- redraw in full next time
         return
     end
     if not solid then
         solid = owner:CreateTexture(nil, layer, nil, sublevel)
         fade = owner:CreateTexture(nil, layer, nil, sublevel)
         owner.fqtSolid, owner.fqtFade = solid, fade
+        owner.fqtColours = { CreateColor(1, 1, 1, 1), CreateColor(1, 1, 1, 1), CreateColor(1, 1, 1, 0) }
+    end
+    local drawn, colours = owner.fqtDrawn, owner.fqtColours
+    local low, high, clear = colours[1], colours[2], colours[3]
+    if drawn and drawn.rev == ns.rev and drawn.file == file and drawn.l == l and drawn.r == r and drawn.t == t
+        and drawn.b == b and drawn.height == height and drawn.layer == layer and drawn.sublevel == sublevel then
+        if drawn.alpha ~= alpha then
+            drawn.alpha = alpha
+            low.a, high.a = alpha, alpha
+            solid:SetGradient("VERTICAL", low, high)
+            fade:SetGradient("VERTICAL", high, clear)
+        end
+        return
     end
     -- The vivid tint: the plain one, desaturated, came out a pale grey-cyan close to the map's own colours.
     local c = VividTint(ns.cfg.tint)
     local cr, cg, cb = math.min(1, c[1] * QUESTIE_BRIGHTNESS), math.min(1, c[2] * QUESTIE_BRIGHTNESS),
         math.min(1, c[3] * QUESTIE_BRIGHTNESS)
+    low:SetRGBA(cr, cg, cb, alpha)
+    high:SetRGBA(cr, cg, cb, alpha)
+    clear:SetRGBA(cr, cg, cb, 0)
     -- A horizontal slice of the icon, from `from` to `to` of the way up, with its matching texture coordinates.
-    local function slice(piece, from, to, alphaLow, alphaHigh)
+    local function slice(piece, from, to, colourLow, colourHigh)
         piece:SetDrawLayer(layer, sublevel)
         piece:ClearAllPoints()
         piece:SetPoint("BOTTOMLEFT", tex, "BOTTOMLEFT", 0, height * from)
@@ -995,11 +1039,15 @@ local function ApplyIconGradient(owner, tex, show, file, l, r, t, b, height, alp
         piece:SetTexture(file)
         piece:SetTexCoord(l, r, b + (t - b) * to, b + (t - b) * from)
         piece:SetDesaturated(true)
-        piece:SetGradient("VERTICAL", CreateColor(cr, cg, cb, alphaLow), CreateColor(cr, cg, cb, alphaHigh))
+        piece:SetGradient("VERTICAL", colourLow, colourHigh)
         piece:Show()
     end
-    slice(solid, 0, QUESTIE_SOLID, alpha, alpha)
-    slice(fade, QUESTIE_SOLID, QUESTIE_FADE, alpha, 0)
+    slice(solid, 0, QUESTIE_SOLID, low, high)
+    slice(fade, QUESTIE_SOLID, QUESTIE_FADE, high, clear)
+    drawn = drawn or {}
+    drawn.rev, drawn.file, drawn.l, drawn.r, drawn.t, drawn.b = ns.rev, file, l, r, t, b
+    drawn.height, drawn.layer, drawn.sublevel, drawn.alpha = height, layer, sublevel, alpha
+    owner.fqtDrawn = drawn
 end
 
 local function ApplyQuestieTint(frame)
