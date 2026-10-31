@@ -165,16 +165,72 @@ local function ApplyLogo(tex, show)
 end
 
 local overlays = setmetatable({}, { __mode = "k" })
+local ApplyFlat, HideFlat -- the flat glow, defined further down
+
+-- A skin (EllesmereUI) can hide the game's parchment and paint the window flat and dark. A copy of the parchment
+-- would then show its grain and torn edges out of place (and keep the parchment's old size when the skin widens the
+-- window), so a skinned window gets the flat glow instead, in the vivid tint at dark-panel strength: over the quest
+-- log's details, or across the quest window's text area from side to side. The parchment counts as skinned when it
+-- is see-through, or when EllesmereUI's skin module is loaded (how it hides the parchment isn't known here).
+local SKIN_SCALE, SKIN_ALPHA = 0.75, 0.6
+local SKIN_PAD = 4 -- in from the quest window's sides
+local SKIN_SCROLL = { -- each quest window panel's text area
+    QuestFrameDetailPanel = "QuestDetailScrollFrame",
+    QuestFrameProgressPanel = "QuestProgressScrollFrame",
+    QuestFrameRewardPanel = "QuestRewardScrollFrame",
+    QuestFrameGreetingPanel = "QuestGreetingScrollFrame",
+}
+local skinRegions = setmetatable({}, { __mode = "k" })
+
+local function IsSkinned(tex)
+    if (tex:GetAlpha() or 1) < 0.05 then return true end
+    local _, _, _, a = tex:GetVertexColor()
+    if a and a < 0.05 then return true end
+    local isLoaded = C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded
+    return isLoaded and isLoaded("EllesmereUIBlizzardSkin") and true or false
+end
+
+-- What the flat glow covers for a skinned parchment: the quest window's text area widened to the window's sides
+-- (the skin may resize the window, not the parchment), else the parchment's own rectangle.
+local function SkinRegion(tex)
+    local parent = tex:GetParent()
+    local scroll = parent and parent.GetName and _G[SKIN_SCROLL[parent:GetName() or ""] or ""]
+    local sl, sr, wl, wr = scroll and scroll:GetLeft(), scroll and scroll:GetRight(), QuestFrame and QuestFrame:GetLeft(),
+        QuestFrame and QuestFrame:GetRight()
+    if not (sl and sr and wl and wr) then return tex end
+    local region = skinRegions[tex]
+    if not region then
+        region = CreateFrame("Frame", nil, parent)
+        skinRegions[tex] = region
+    end
+    region:ClearAllPoints()
+    region:SetPoint("TOPLEFT", scroll, "TOPLEFT", wl + SKIN_PAD - sl, 0)
+    region:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", wr - SKIN_PAD - sr, 0)
+    return region
+end
 ns.rev = 0 -- bumped by ns.Reapply; invalidates the cached overlay geometry
 
 local function ApplyOverlay(tex, tinted, noLogo)
     local ov = overlays[tex]
     ApplyLogo(tex, tinted and ns.cfg.showLogo and not noLogo)
     tinted = tinted and ns.cfg.showTint
+    local skinKey = "skin" .. tostring(tex)
     if not tinted then
         if ov then ov:Hide() end
+        HideFlat(skinKey)
         return
     end
+    if IsSkinned(tex) then
+        if ov then ov:Hide() end
+        -- One glow per window: on the main (largest) parchment only, the one that also gets the logo.
+        if noLogo then
+            HideFlat(skinKey)
+        else
+            ApplyFlat(skinKey, tex:GetParent(), SkinRegion(tex), SKIN_SCALE, SKIN_ALPHA, nil, "BORDER", true)
+        end
+        return
+    end
+    HideFlat(skinKey)
     if not ov then
         ov = tex:GetParent():CreateTexture(nil, "BACKGROUND", nil, 2)
         overlays[tex] = ov
@@ -598,7 +654,7 @@ local GLOW_BOTTOM_UV = { 0.74, 0.76, 0.5, 1 }           -- a column through the 
 local GLOW_SIDE_UV = { 0, 0.5, 0.23, 0.25 }             -- a row through the straight left edge
 local flats = {}
 
-local function HideFlat(key)
+function HideFlat(key)
     local ov = flats[key]
     if not ov then return end
     ov:Hide()
@@ -616,7 +672,7 @@ local function FlatColourAt(key, y)
     return c[1], c[2], c[3], math.max(0, math.min(1, ov.fqtAlphaAt(y - bottom)))
 end
 
-local function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer, vivid, art)
+function ApplyFlat(key, parent, region, scale, strength, corner, drawLayer, vivid, art)
     local cfg = ns.cfg
     local height = region and region:GetHeight()
     local fade = height and height * cfg.height
