@@ -3,6 +3,7 @@
 ## 0.7.0
 - Works with the Immersion addon: its Quest Objectives and Rewards panel gets a teal glow, and the optional logo in the panel's corner.
 - Works with Storyline: its speech bubble gets a teal glow while it shows quest text, and the optional logo in the bubble's corner.
+- The Immersion and Storyline glows fill their panel's shape, with rounded corners and a soft edge, in a more vivid version of your tint colour (as Dialogue UI's window does). The tint colour setting itself is unchanged.
 - Works with Lorewalker's Classic mode: its quest page gets a teal wash that follows the page's outline (a deeper glow on its Dark theme), and the optional logo on its title bar.
 - Works with ClassicUI Forever: the tint on its quest log window and on its map parchment, and the quest name marker in its quest log list and quest watch. Pages its dark themes darken get a teal glow.
 - Works with Questie: the yellow ! and ? of non-vanilla quests on the world map and minimap are drawn in the tint colour. Grey, blue, event and PvP icons keep Questie's colours. New option, on by default.
