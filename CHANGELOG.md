@@ -3,6 +3,7 @@
 ## 0.7.2
 - Fixed the options panel sometimes showing every option unticked (or reset) while the saved options were still in effect, so unticking an option seemed to do nothing. It happened when the options were opened with the Settings window already showing another page. Thanks to the players who reported it.
 - The "Add the logo beside quests in the tracker" option now works in Questie's quest tracker too.
+- The preview now works as a preview: it isn't saved, and goes back to auto after a reload or logout. The options button shows its current state (Preview: auto, on or off). A preview left on by 0.7.0 or 0.7.1, which marked every quest, is cleared.
 
 ## 0.7.1
 - Lower CPU use. Questie's minimap icons, which Questie fades up to ten times a second as you move, now only update the strength of their teal gradient instead of redrawing it, with no temporary tables. The flat teal glow (EllesmereUI's quest log and the other glowing panels) is no longer redrawn twenty times a second while nothing about it changes.
