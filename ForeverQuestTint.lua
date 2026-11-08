@@ -23,7 +23,6 @@ ns.defaults = {
     objectiveUseTint = true,   -- objectives use the tint colour...
     objectiveColor = { 0.60, 0.90, 0.95 }, -- ...or this colour
     questieTint = true, -- teal gradient on the yellow ! and ? map icons (the game's and Questie's) of non-vanilla quests
-    preview = "auto", -- testing aid: "auto" marks non-vanilla quests, "on" marks every quest, "off" none
 }
 
 local function CopyDefaults(dst, src)
@@ -38,6 +37,9 @@ local function CopyDefaults(dst, src)
     return dst
 end
 ns.cfg = CopyDefaults({}, ns.defaults)
+-- Preview, a testing aid: "auto" marks non-vanilla quests, "on" marks every quest, "off" none. Not saved, so it is
+-- back to "auto" after every reload or login and can't be left on by accident.
+ns.preview = "auto"
 
 local PANELS = {
     "QuestFrameDetailPanel",
@@ -69,7 +71,7 @@ end
 -- so the look can be checked on any client (or any quest) without hunting for a non-vanilla one.
 local function IsMarked(id)
     if not id or id <= 0 then return false end
-    local preview = ns.cfg.preview
+    local preview = ns.preview
     if preview == "on" then return true end
     if preview == "off" then return false end
     return not IsVanilla(id)
@@ -1789,9 +1791,13 @@ local function MarkQuestieLine(line)
     local quest = line.mode == "quest" and type(line.Quest) == "table" and line.Quest
     local label = line.label
     if not label then return end
+    local marked = quest and IsMarked(quest.Id) or false
     label.fqtRemarking = true
-    ApplyMarker(label, quest and IsMarked(quest.Id) or false)
+    ApplyMarker(label, marked)
     label.fqtRemarking = nil
+    -- The tracker logo option: at the top-right of the title line, as in the game's tracker. Lines are reused for
+    -- objectives and zone headers, which hide it again.
+    UpdateTrackerLogo(line, marked)
 end
 
 local function RefreshQuestieTracker()
@@ -1894,13 +1900,12 @@ loader:SetScript("OnEvent", function(_, event, name)
             db.tint = { 0.60, 0.90, 0.95 }
         end
         db.vividTint = nil
+        -- 0.7.0 and 0.7.1 saved the preview, which could leave every quest marked; it is no longer saved.
+        db.preview = nil
         ForeverQuestTintDB = CopyDefaults(db, ns.defaults)
         ns.cfg = ForeverQuestTintDB
-    end
-    if event == "PLAYER_LOGIN" and ns.cfg.preview ~= "auto" then
-        -- The preview is saved between sessions, so make sure it is never left on by accident.
-        print(("|cff99e6f2Forever Quest Tint:|r preview is forcing the tint %s for every quest. Type /fqt preview auto to go back to normal.")
-            :format(ns.cfg.preview == "on" and "ON" or "OFF"))
+        -- The options panel was built with the defaults: show the saved options in it from the start.
+        if ns.SyncOptions then ns.SyncOptions() end
     end
     HookLog()
     HookMarkers()
@@ -1965,13 +1970,13 @@ function ns.SetPreview(mode)
         return
     end
     if not PREVIEW_TEXT[mode] then
-        local cur = ns.cfg.preview
+        local cur = ns.preview
         for i, m in ipairs(PREVIEW_MODES) do
             if m == cur then mode = PREVIEW_MODES[i % #PREVIEW_MODES + 1] end
         end
         mode = mode or "auto"
     end
-    ns.cfg.preview = mode
+    ns.preview = mode
     ns.Reapply()
     if ns.SyncOptions then ns.SyncOptions() end
     print("|cff99e6f2Forever Quest Tint:|r preview " .. PREVIEW_TEXT[mode])
@@ -1986,7 +1991,7 @@ local function Status()
     print(("|cff99e6f2Forever Quest Tint|r %s on interface %s (build %s), preview %s"):format(
         tostring(C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version")
             or GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")),
-        tostring(interface), tostring(build), PREVIEW_TEXT[ns.cfg.preview] or tostring(ns.cfg.preview)))
+        tostring(interface), tostring(build), PREVIEW_TEXT[ns.preview] or tostring(ns.preview)))
     print(("  Dialogue UI: %s (hooked %s)  Immersion: %s (hooked %s)  Lorewalker: %s (hooked %s)"):format(
         loaded("DialogueUI"), tostring(duiWatcher ~= nil), loaded("Immersion"), tostring(immHooked),
         loaded("Lorewalker"), tostring(lwHooked)))

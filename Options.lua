@@ -224,7 +224,7 @@ previewHeader:SetText("Preview")
 local previewButton = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
 previewButton:SetSize(140, 24)
 previewButton:SetPoint("TOPLEFT", previewHeader, "BOTTOMLEFT", 0, -10)
-previewButton:SetText("Change preview")
+previewButton:SetText("Preview: auto")
 previewButton:SetScript("OnClick", function() ns.SetPreview() end)
 
 local previewText = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -314,8 +314,9 @@ function Sync()
     for _, key in ipairs({ "alpha", "topAlpha", "height", "markerHeight", "markerOffset", "markerGap" }) do
         widgets[key]:SetValue(math.floor(c[key] * sliderScale[key] + 0.5))
     end
-    previewText:SetText("Tint is " .. (ns.PREVIEW_TEXT[c.preview] or tostring(c.preview))
-        .. ".\nFor testing only: \"auto\" is the normal behaviour.")
+    previewButton:SetText("Preview: " .. ns.preview)
+    previewText:SetText("Tint is " .. (ns.PREVIEW_TEXT[ns.preview] or ns.preview)
+        .. ".\nClick to try it on every quest (on) or none (off). Back to auto after a reload or logout.")
     syncing = false
 end
 ns.SyncOptions = Sync
@@ -328,6 +329,7 @@ reset:SetScript("OnClick", function()
             ns.cfg[k] = v
         end
     end
+    ns.preview = "auto"
     Sync()
     ns.Reapply()
 end)
@@ -351,6 +353,14 @@ canvas:HookScript("OnShow", function()
     FitContent()
     C_Timer.After(0, FitContent) -- once the window has laid the canvas out
 end)
+-- The Settings window moves this canvas into its own and calls OnRefresh each time it displays it. A canvas made at
+-- load is already shown, so moving it into an open Settings window changes nothing visible: no OnShow fires, and
+-- without this the checkboxes kept their blank defaults (unticked, while the saved options were still on).
+canvas.OnRefresh = function()
+    Sync()
+    FitContent()
+    C_Timer.After(0, FitContent)
+end
 
 local category
 if Settings and Settings.RegisterCanvasLayoutCategory then

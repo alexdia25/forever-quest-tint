@@ -54,6 +54,8 @@ function Object:SetBlendMode(m) self.blend = m end
 function Object:SetDesaturated(d) self.desat = d end
 function Object:SetAlpha(a) self.alpha = a end
 function Object:GetAlpha() return self.alpha or 1 end
+function Object:SetChecked(c) self.checked = c and true or false end
+function Object:GetChecked() return self.checked end
 function Object:GetStringHeight() return 12 end
 function Object:GetName() return self.name end
 function Object:GetObjectType() return self.kind end
@@ -119,7 +121,8 @@ C_AddOns = { IsAddOnLoaded = function(n) return n == "Immersion" or (skinLoaded 
 SlashCmdList = {}
 local printed = {}
 function print(...) local t = {}; for i = 1, select("#", ...) do t[i] = tostring((select(i, ...))) end; local s = table.concat(t, " "); table.insert(printed, s); io.write("  [print] ", s, "\n") end
-Settings = { RegisterCanvasLayoutCategory = function() return { GetID = function() return 1 end } end,
+local settingsCanvas
+Settings = { RegisterCanvasLayoutCategory = function(frame) settingsCanvas = frame; return { GetID = function() return 1 end } end,
     RegisterAddOnCategory = function() end }
 
 -- Immersion's frame, as its Frame.xml builds it.
@@ -236,7 +239,7 @@ local glow = function() return glowParts(panel).all[1] end
 
 -- Event frames created at load have no parent: reach them through the slash/handlers instead.
 -- 1) Immersion showing an old (vanilla) quest in auto mode: no glow.
-ns.cfg.preview = "auto"
+ns.preview = "auto"
 questID = 7   -- a vanilla quest id
 ImmersionFrame.lastEvent = "QUEST_DETAIL"
 ImmersionFrame:Fire("OnEvent", "QUEST_DETAIL"); RunTimers()
@@ -265,19 +268,19 @@ check(not glowShown(panel), "gossip hides the glow")
 ImmersionFrame.lastEvent = "QUEST_PROGRESS"; questID = 7
 panel:Show()
 SlashCmdList.FQT("preview on")
-check(ns.cfg.preview == "on" and glowShown(panel), "/fqt preview on forces the glow on a vanilla quest")
+check(ns.preview == "on" and glowShown(panel), "/fqt preview on forces the glow on a vanilla quest")
 questID = 999999
 SlashCmdList.FQT("preview off")
-check(ns.cfg.preview == "off" and not glowShown(panel), "/fqt preview off hides it on a non-vanilla quest")
+check(ns.preview == "off" and not glowShown(panel), "/fqt preview off hides it on a non-vanilla quest")
 SlashCmdList.FQT("preview")
-check(ns.cfg.preview == "auto" and glowShown(panel), "/fqt preview cycles off -> auto")
+check(ns.preview == "auto" and glowShown(panel), "/fqt preview cycles off -> auto")
 SlashCmdList.FQT("Glow ON")
-check(ns.cfg.preview == "on", "/fqt glow on alias, case-insensitive")
+check(ns.preview == "on", "/fqt glow on alias, case-insensitive")
 SlashCmdList.FQT("preview bogus")
-check(ns.cfg.preview == "on" and printed[#printed]:find("usage"), "unknown mode prints usage and changes nothing")
+check(ns.preview == "on" and printed[#printed]:find("usage"), "unknown mode prints usage and changes nothing")
 
 -- 5) The panel grows to fit its contents; the logo sits in its corner.
-ns.cfg.preview = "auto"; ns.cfg.showLogo = true
+ns.preview = "auto"; ns.cfg.showLogo = true
 immInnerFrame.h = 260; panel:Fire("OnSizeChanged")
 local _, side = checkRoundedGlow(panel, 12, "Immersion (grown)")
 check(math.abs(side.points[1][5] + side.h - 260 * ns.cfg.height) < 0.01, "glow follows the panel's new size")
@@ -295,7 +298,7 @@ check(not glowShown(panel) and logo.shown, "tint off keeps the logo, hides the g
 
 
 -- 7) Lorewalker: tint and logo only for a marked quest, only while its quest part shows.
-ns.cfg.showTint = true; ns.cfg.showLogo = true; ns.cfg.preview = "auto"
+ns.cfg.showTint = true; ns.cfg.showLogo = true; ns.preview = "auto"
 questID = 999999
 LWDialogFrame.QuestFrame:Fire("OnShow"); RunTimers()
 check(glowShown(lwPage), "Lorewalker: marked quest gets the wash")
@@ -445,7 +448,7 @@ check(ovs[1].shown and not ovs[2].shown, "map: back on the game's parchment when
 
 
 -- 11) Questie: a teal gradient over the yellow ! and ? of marked quests; Questie's own icon is never changed.
-ns.cfg.questieTint = true; ns.cfg.preview = "auto"; ns.Reapply()
+ns.cfg.questieTint = true; ns.preview = "auto"; ns.Reapply()
 local function vc(f) return f.texture.vc end
 -- Questie's icon as Questie left it: not desaturated, its own colour.
 local function original(f) return not f.texture.desat and vc(f)[1] == f.texture.r and vc(f)[4] == f.texture.a end
@@ -535,7 +538,7 @@ check(not badge().shown, "tracker: option off hides the logo")
 
 
 -- 13) Storyline: wash inside the speech bubble and the logo in its corner, for marked quests only.
-ns.cfg.showTint = true; ns.cfg.showLogo = true; ns.cfg.preview = "auto"
+ns.cfg.showTint = true; ns.cfg.showLogo = true; ns.preview = "auto"
 local chat = Storyline_NPCFrameChat
 local function slLogo() for _, c in ipairs(chat.children) do if c.texture then return c end end end
 questID = 999999
@@ -572,7 +575,7 @@ local qBg = qPanel:CreateTexture(); _G.QuestFrameDetailPanelBg = qBg
 qBg:SetAtlas("QuestBG-Parchment"); qBg:SetTexture("parchment"); qBg.l, qBg.r, qBg.b, qBg.t, qBg.w, qBg.h = 30, 385, 60, 600, 355, 540
 local qScroll = new("ScrollFrame", qPanel); _G.QuestDetailScrollFrame = qScroll
 qScroll.l, qScroll.r, qScroll.b, qScroll.t, qScroll.h = 36, 400, 70, 600, 530
-ns.cfg.showTint, ns.cfg.preview = true, "auto"
+ns.cfg.showTint, ns.preview = true, "auto"
 local function questCopy()
     for _, r in ipairs(qPanel.regions) do if r ~= qBg and r.desat and r.shown then return r end end
 end
@@ -696,7 +699,7 @@ local trivial = offerPin(999999, nil, 0.5)
 local campaign = offerPin(999999, "Quest-Campaign-Available")
 local turnin = questPin(999999)
 local inProgress = questPin(999999, "UI-QuestPoi-Number")
-ns.cfg.questieTint, ns.cfg.preview = true, "auto"
+ns.cfg.questieTint, ns.preview = true, "auto"
 ns.Reapply()
 local function pinTinted(owner) return owner.fqtSolid and owner.fqtSolid.shown end
 check(pinTinted(giver) and giver.fqtSolid.file == "atlas:QuestNormal" and giver.fqtSolid.layer == "ARTWORK"
@@ -715,6 +718,46 @@ check(pinTinted(giver), "map pins: and tinted again for a marked quest")
 ns.cfg.questieTint = false; ns.Reapply()
 check(not pinTinted(giver) and not pinTinted(turnin.Display), "map pins: the option turns them off")
 ns.cfg.questieTint = true; ns.Reapply()
+
+-- 17) Questie's tracker gets the tracker logo too, beside marked titles; a line reused for an objective hides it.
+ns.cfg.trackerLogo = true; ns.Reapply()
+questieWrite(1, "quest", { Id = 999999 }, "[11] Coming of Age")
+check(_G.linePool1.fqtLogo and _G.linePool1.fqtLogo.shown, "Questie tracker: tracker logo beside a marked title")
+questieWrite(1, "objective", { Id = 999999 }, "Quest Complete!")
+check(not _G.linePool1.fqtLogo.shown, "Questie tracker: the logo goes when the line shows an objective")
+ns.cfg.trackerLogo = false; ns.Reapply()
+
+-- 18) The options panel shows the saved options: the Settings window calls OnRefresh as it displays the canvas
+-- (no OnShow fires when it moves an already-shown canvas in), and the saved options are synced at login.
+local function checkbox(label)
+    for _, f in ipairs(allFrames) do
+        if f.kind == "CheckButton" and f.text and f.text.text == label then return f end
+    end
+end
+local markBox = checkbox("Mark quests in log and tracker")
+check(markBox and type(settingsCanvas.OnRefresh) == "function", "options: the canvas has OnRefresh for the Settings window")
+markBox.checked = false; ns.cfg.marker = true
+settingsCanvas:OnRefresh()
+check(markBox.checked == true, "options: OnRefresh shows the saved option (ticked), not the blank default")
+-- Clicking it still changes the option.
+markBox.checked = false; markBox:Fire("OnClick")
+check(ns.cfg.marker == false, "options: unticking a box turns the option off")
+-- The preview button shows its state.
+SlashCmdList.FQT("preview on"); settingsCanvas:OnRefresh()
+local previewButton
+for _, f in ipairs(allFrames) do if f.kind == "Button" and f.text and tostring(f.text):find("^Preview: ") then previewButton = f end end
+check(previewButton and previewButton.text == "Preview: on", "options: the preview button shows the current mode")
+-- At login: the saved options (here, the marker off and the tracker logo on) are shown in the panel straight away;
+-- the preview is not saved, and a preview saved by 0.7.0/0.7.1 is cleared.
+ns.preview = "auto"
+ForeverQuestTintDB = { marker = false, trackerLogo = true, preview = "on" }
+FireGameEvent("ADDON_LOADED", "ForeverQuestTint")
+check(ns.preview == "auto" and ForeverQuestTintDB.preview == nil, "preview: not saved; an old saved preview is cleared")
+SlashCmdList.FQT("preview on")
+check(ForeverQuestTintDB.preview == nil, "preview: turning it on doesn't save it")
+SlashCmdList.FQT("preview auto")
+check(markBox.checked == false and checkbox("Add the logo beside quests in the tracker").checked == true,
+    "options: saved options are shown in the panel from login")
 
 SlashCmdList.FQT("status")
 print("ALL PASSED")

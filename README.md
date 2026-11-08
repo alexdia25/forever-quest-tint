@@ -33,7 +33,7 @@ Type `/fqt`, or open **Options → AddOns → Forever Quest Tint**.
 
 - **Quest objectives**: off by default. Recolours the objective lines of non-vanilla quests (in the quest log list and the tracker) from white to the tint colour, or a colour of your choice. Completed and failed objectives keep their own colours.
 
-- **Preview**: a testing aid. Forces the tint, logo and marker **on** for every quest, **off** for every quest, or back to **auto** (the normal behaviour). It is remembered between sessions, and the addon reminds you at login while it is not on auto.
+- **Preview**: a testing aid. Forces the tint, logo and marker **on** for every quest, **off** for every quest, or back to **auto** (the normal behaviour). It isn't saved: it is back to auto after a reload or logout.
 
 ### Commands
 
