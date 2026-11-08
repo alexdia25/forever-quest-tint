@@ -351,6 +351,14 @@ canvas:HookScript("OnShow", function()
     FitContent()
     C_Timer.After(0, FitContent) -- once the window has laid the canvas out
 end)
+-- The Settings window moves this canvas into its own and calls OnRefresh each time it displays it. A canvas made at
+-- load is already shown, so moving it into an open Settings window changes nothing visible: no OnShow fires, and
+-- without this the checkboxes kept their blank defaults (unticked, while the saved options were still on).
+canvas.OnRefresh = function()
+    Sync()
+    FitContent()
+    C_Timer.After(0, FitContent)
+end
 
 local category
 if Settings and Settings.RegisterCanvasLayoutCategory then

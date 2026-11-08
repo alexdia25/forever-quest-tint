@@ -1789,9 +1789,13 @@ local function MarkQuestieLine(line)
     local quest = line.mode == "quest" and type(line.Quest) == "table" and line.Quest
     local label = line.label
     if not label then return end
+    local marked = quest and IsMarked(quest.Id) or false
     label.fqtRemarking = true
-    ApplyMarker(label, quest and IsMarked(quest.Id) or false)
+    ApplyMarker(label, marked)
     label.fqtRemarking = nil
+    -- The tracker logo option: at the top-right of the title line, as in the game's tracker. Lines are reused for
+    -- objectives and zone headers, which hide it again.
+    UpdateTrackerLogo(line, marked)
 end
 
 local function RefreshQuestieTracker()
@@ -1896,6 +1900,8 @@ loader:SetScript("OnEvent", function(_, event, name)
         db.vividTint = nil
         ForeverQuestTintDB = CopyDefaults(db, ns.defaults)
         ns.cfg = ForeverQuestTintDB
+        -- The options panel was built with the defaults: show the saved options in it from the start.
+        if ns.SyncOptions then ns.SyncOptions() end
     end
     if event == "PLAYER_LOGIN" and ns.cfg.preview ~= "auto" then
         -- The preview is saved between sessions, so make sure it is never left on by accident.

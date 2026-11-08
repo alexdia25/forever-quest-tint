@@ -54,6 +54,8 @@ function Object:SetBlendMode(m) self.blend = m end
 function Object:SetDesaturated(d) self.desat = d end
 function Object:SetAlpha(a) self.alpha = a end
 function Object:GetAlpha() return self.alpha or 1 end
+function Object:SetChecked(c) self.checked = c and true or false end
+function Object:GetChecked() return self.checked end
 function Object:GetStringHeight() return 12 end
 function Object:GetName() return self.name end
 function Object:GetObjectType() return self.kind end
@@ -119,7 +121,8 @@ C_AddOns = { IsAddOnLoaded = function(n) return n == "Immersion" or (skinLoaded 
 SlashCmdList = {}
 local printed = {}
 function print(...) local t = {}; for i = 1, select("#", ...) do t[i] = tostring((select(i, ...))) end; local s = table.concat(t, " "); table.insert(printed, s); io.write("  [print] ", s, "\n") end
-Settings = { RegisterCanvasLayoutCategory = function() return { GetID = function() return 1 end } end,
+local settingsCanvas
+Settings = { RegisterCanvasLayoutCategory = function(frame) settingsCanvas = frame; return { GetID = function() return 1 end } end,
     RegisterAddOnCategory = function() end }
 
 -- Immersion's frame, as its Frame.xml builds it.
@@ -715,6 +718,35 @@ check(pinTinted(giver), "map pins: and tinted again for a marked quest")
 ns.cfg.questieTint = false; ns.Reapply()
 check(not pinTinted(giver) and not pinTinted(turnin.Display), "map pins: the option turns them off")
 ns.cfg.questieTint = true; ns.Reapply()
+
+-- 17) Questie's tracker gets the tracker logo too, beside marked titles; a line reused for an objective hides it.
+ns.cfg.trackerLogo = true; ns.Reapply()
+questieWrite(1, "quest", { Id = 999999 }, "[11] Coming of Age")
+check(_G.linePool1.fqtLogo and _G.linePool1.fqtLogo.shown, "Questie tracker: tracker logo beside a marked title")
+questieWrite(1, "objective", { Id = 999999 }, "Quest Complete!")
+check(not _G.linePool1.fqtLogo.shown, "Questie tracker: the logo goes when the line shows an objective")
+ns.cfg.trackerLogo = false; ns.Reapply()
+
+-- 18) The options panel shows the saved options: the Settings window calls OnRefresh as it displays the canvas
+-- (no OnShow fires when it moves an already-shown canvas in), and the saved options are synced at login.
+local function checkbox(label)
+    for _, f in ipairs(allFrames) do
+        if f.kind == "CheckButton" and f.text and f.text.text == label then return f end
+    end
+end
+local markBox = checkbox("Mark quests in log and tracker")
+check(markBox and type(settingsCanvas.OnRefresh) == "function", "options: the canvas has OnRefresh for the Settings window")
+markBox.checked = false; ns.cfg.marker = true
+settingsCanvas:OnRefresh()
+check(markBox.checked == true, "options: OnRefresh shows the saved option (ticked), not the blank default")
+-- Clicking it still changes the option.
+markBox.checked = false; markBox:Fire("OnClick")
+check(ns.cfg.marker == false, "options: unticking a box turns the option off")
+-- At login: the saved options (here, the marker off and the tracker logo on) are shown in the panel straight away.
+ForeverQuestTintDB = { marker = false, trackerLogo = true }
+FireGameEvent("ADDON_LOADED", "ForeverQuestTint")
+check(markBox.checked == false and checkbox("Add the logo beside quests in the tracker").checked == true,
+    "options: saved options are shown in the panel from login")
 
 SlashCmdList.FQT("status")
 print("ALL PASSED")
