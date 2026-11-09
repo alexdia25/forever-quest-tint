@@ -1,9 +1,11 @@
 # Changelog
 
+## 0.7.3
+- Fixed the quest name marker missing in the objective tracker for elite, dungeon, PvP and raid quests on Forever, whose tracker adds the tag after the name ("Quest Name (Elite)").
+
 ## 0.7.2
 - Fixed the options panel sometimes showing every option unticked (or reset) while the saved options were still in effect, so unticking an option seemed to do nothing. It happened when the options were opened with the Settings window already showing another page. Thanks to the players who reported it.
 - The "Add the logo beside quests in the tracker" option now works in Questie's quest tracker too.
-- Fixed the quest name marker missing in the objective tracker for elite, dungeon, PvP and raid quests on Forever, whose tracker adds the tag after the name ("Quest Name (Elite)").
 - The preview now works as a preview: it isn't saved, and goes back to auto after a reload or logout. The options button shows its current state (Preview: auto, on or off). A preview left on by 0.7.0 or 0.7.1, which marked every quest, is cleared.
 
 ## 0.7.1
