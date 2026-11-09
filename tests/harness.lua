@@ -759,5 +759,22 @@ SlashCmdList.FQT("preview auto")
 check(markBox.checked == false and checkbox("Add the logo beside quests in the tracker").checked == true,
     "options: saved options are shown in the panel from login")
 
+-- 19) Forever's tracker titles: "[level(+)] Title (Tag)" in the quest's difficulty colour (QuestUtilsOverrides,
+-- SetQuestTitleLevelAndDifficultyColor in its UI source).
+LOG[#LOG + 1] = { title = "Odd Quest (Part 1)", questID = 888888 }
+ns.cfg.marker = true; ns.Reapply(); RunTimers()
+local function trackerTitle(text)
+    local b = new("Frame", ObjectiveTrackerFrame)
+    local h = b:CreateFontString(); h:SetText(text)
+    return h
+end
+local elite = trackerTitle("|cffff8040[12+] Forever Quest (Elite)|r")
+local dungeon = trackerTitle("|cff40c040[12] Vanilla Quest (Dungeon)|r")
+local odd = trackerTitle("|cffffd100[12] Odd Quest (Part 1)|r")
+ns.Reapply(); RunTimers()
+check(elite.text:find("|T") ~= nil, "Forever tracker: a tagged non-vanilla title (Elite) gets the marker")
+check(not dungeon.text:find("|T"), "Forever tracker: a tagged vanilla title (Dungeon) stays plain")
+check(odd.text:find("|T") ~= nil, "Forever tracker: a title that itself ends in brackets still matches")
+
 SlashCmdList.FQT("status")
 print("ALL PASSED")

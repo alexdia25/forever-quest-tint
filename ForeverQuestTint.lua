@@ -1278,7 +1278,7 @@ local function MarkerGlyph()
     return ("|cff%02x%02x%02x%s|r"):format(r, g, b, cfg.markerSymbol)
 end
 
-local titleMap, BuildTitleMap, StripPrefixes -- defined further down; the SetText hook needs them
+local titleMap, BuildTitleMap, StripPrefixes, TitleMarked -- defined further down; the SetText hook needs them
 
 -- Sets fs's text to the marked (or original) version. Remembers the original so this can be
 -- re-run safely, including after Blizzard rewrites the text. With padBlock, an entry whose
@@ -1349,7 +1349,7 @@ local function ApplyMarker(fs, wanted, padBlock, keep)
             if not text or text == "" or text == self.fqtMarked then return end
             if not titleMap then BuildTitleMap() end
             -- Unmarked text too, so a reused tracker block drops its logo at once.
-            local isMarked = titleMap[text] or titleMap[StripPrefixes(text)]
+            local isMarked = TitleMarked(text)
             self.fqtRemarking = true
             ApplyMarker(self, isMarked, self.fqtPadBlock)
             self.fqtRemarking = nil
@@ -1486,10 +1486,22 @@ function StripPrefixes(text)
     return text
 end
 
+-- Whether a line of text is a marked quest's title (nil when it is no quest title): as written, without the tracker's
+-- prefixes, or without a trailing tag in brackets. Forever's tracker writes "[12+] Title (Elite)", and likewise
+-- (Dungeon), (PvP) and (Raid); the tag is tried last, so a title that itself ends in brackets matches first.
+function TitleMarked(text)
+    local hit = titleMap[text]
+    if hit ~= nil then return hit end
+    local stripped = StripPrefixes(text)
+    hit = titleMap[stripped]
+    if hit ~= nil then return hit end
+    return titleMap[(stripped:gsub("%s+%b()%s*$", ""))]
+end
+
 local function TrackerSetLine(line, _, _, isHeader, text)
     if not isHeader or type(text) ~= "string" then return end
     if not titleMap then BuildTitleMap() end
-    local wanted = titleMap[text] or titleMap[StripPrefixes(text)]
+    local wanted = TitleMarked(text)
     ApplyMarker(line.text, wanted)
 end
 
@@ -1530,7 +1542,7 @@ local function ScanRegion(region)
     local text = region:GetText()
     if not text or text == "" then return end
     local base = (region.fqtMarked and text == region.fqtMarked) and region.fqtBase or text
-    local wanted = titleMap[base] or titleMap[StripPrefixes(base)]
+    local wanted = TitleMarked(base)
     if wanted or region.fqtMarked then
         -- A flat list's lines all share one parent, so there is no block to pad (or to recolour below).
         ApplyMarker(region, wanted, not scanFlat, true)
