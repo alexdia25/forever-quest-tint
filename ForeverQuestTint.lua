@@ -211,6 +211,9 @@ local function SkinRegion(tex)
                 skinRegions[tex] = region
             end
             local dx = rewardsRight and rewardsRight < texRight and rewardsRight - texRight or 0
+            -- Run REWARDS_OVERLAP under the panel's top edge (its rim starts below the reported edge), so the
+            -- glow's strongest part reaches the panel instead of ending short of it.
+            if rewardsTop then rewardsTop = rewardsTop - REWARDS_OVERLAP end
             local dy = rewardsTop and rewardsTop > texBottom and rewardsTop < texTop and rewardsTop - texBottom or 0
             if region.fqtAnchor ~= tex or region.fqtX ~= dx or region.fqtY ~= dy then
                 region.fqtAnchor, region.fqtX, region.fqtY = tex, dx, dy
@@ -1895,6 +1898,81 @@ local function HookMarkers()
     end
 end
 
+-- EllesmereUI's own quest tracker (its "new" tracker, drawn instead of Blizzard's): a list of rows it rebuilds from
+-- scratch, with a public hook that runs for each quest title row (EllesmereUI.RegisterQuestTrackerRow). The title is
+-- marked there, and the optional logo sits on the hook's slot frame, which EllesmereUI hides on rows that are not
+-- quest titles (rows are reused). Kept in one table: the file is near Lua's limit of 200 locals in one scope.
+local Ell = { registered = false, ID = "ForeverQuestTint" }
+ns.Ell = Ell
+
+function Ell.Row(slot, questID, fs)
+    local marked = IsMarked(questID)
+    ApplyMarker(fs, marked)
+    local row = slot:GetParent()
+    -- A marker that would wrap the title onto another line would overlap the row below: leave that title plain.
+    if fs.fqtMarked and fs.fqtBase and fs.fqtMarked ~= fs.fqtBase and row and row.lastH
+        and fs:GetStringHeight() > row.lastH + 1 then
+        fs:SetText(fs.fqtBase)
+        fs.fqtMarked = fs.fqtBase
+    end
+    local badge = slot.fqtLogo
+    if marked and ns.cfg.trackerLogo and row then
+        if not badge then
+            badge = slot:CreateTexture(nil, "OVERLAY")
+            badge:SetTexture(LOGO_PATH)
+            badge:SetSize(TRACKER_LOGO_SIZE, TRACKER_LOGO_SIZE)
+            badge:SetPoint("TOPRIGHT", row, "TOPRIGHT", TRACKER_LOGO_X, TRACKER_LOGO_Y)
+            slot.fqtLogo = badge
+        end
+        badge:Show()
+    elseif badge then
+        badge:Hide()
+    end
+end
+
+function Ell.Hook()
+    if Ell.registered then return end
+    local E = _G.EllesmereUI
+    if type(E) ~= "table" or type(E.RegisterQuestTrackerRow) ~= "function" then return end
+    Ell.registered = E.RegisterQuestTrackerRow(Ell.ID, Ell.Row, 0) and true or false
+end
+
+function Ell.Refresh()
+    Ell.Hook()
+    local E = _G.EllesmereUI
+    if Ell.registered and type(E) == "table" and type(E.RefreshQuestTrackerRows) == "function" then
+        E.RefreshQuestTrackerRows()
+    end
+end
+
+-- Debugging aid for Questie's icons (/fqt questie [questID]): what each icon of a quest looks like to this addon.
+function Ell.QuestieReport(questID)
+    local n = 0
+    for _, frame in ipairs(questieFrames) do
+        local data = frame.data
+        if data and frame:IsShown() and (not questID or data.Id == questID) and IsMarked(data.Id) then
+            n = n + 1
+            local tex = frame.texture
+            local kind = "other"
+            if type(Questie) == "table" and type(Questie.usedIcons) == "table" then
+                for name, key in pairs(Questie) do
+                    if type(name) == "string" and name:find("^ICON_TYPE_") and type(key) == "number"
+                        and Questie.usedIcons[key] == frame.fqtIcon then
+                        kind = name:gsub("^ICON_TYPE_", "")
+                        break
+                    end
+                end
+            end
+            print(("  quest %s %s: icon %s, tintable %s, colour %.2f/%.2f/%.2f alpha %.2f, size %.0f, tint %s"):format(
+                tostring(data.Id), frame.miniMapIcon and "minimap" or "map", kind, tostring(QuestieTintable(frame)),
+                tex and tex.r or 1, tex and tex.g or 1, tex and tex.b or 1, tex and tex.a or 1, frame:GetHeight() or 0,
+                frame.fqtSolid and frame.fqtSolid:IsShown() and "drawn" or "not drawn"))
+        end
+    end
+    print(("Forever Quest Tint: %d shown Questie icon(s) of non-vanilla quests%s (hooked frames: %d)"):format(
+        n, questID and (" for quest " .. questID) or "", #questieFrames))
+end
+
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:RegisterEvent("ADDON_LOADED")
@@ -1929,6 +2007,7 @@ loader:SetScript("OnEvent", function(_, event, name)
     HookQuestieTracker()
     HookStoryline()
     MapPins.Hook()
+    Ell.Hook()
 end)
 HookLog()
 HookMarkers()
@@ -1939,6 +2018,7 @@ HookCUIF()
 HookQuestie()
 HookStoryline()
 MapPins.Hook()
+Ell.Hook()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
@@ -1963,6 +2043,7 @@ function ns.Reapply()
     RefreshLog()
     RefreshLogList()
     RefreshTracker()
+    Ell.Refresh()
     QueueScan()
 end
 
@@ -2013,6 +2094,7 @@ local function Status()
     print(("  Questie: %s (map icons %s, %d hooked)  Storyline: %s (hooked %s)"):format(loaded("Questie"),
         questieHooked and "hooked" or "not hooked", #questieFrames, loaded("Storyline"), tostring(slHooked)))
     print(("  Questie tracker: %s"):format(#questieLines > 0 and (#questieLines .. " lines hooked") or "not hooked"))
+    print(("  EllesmereUI own tracker rows: %s"):format(Ell.registered and "hooked" or "not hooked"))
 end
 
 SLASH_FQT1 = "/fqt"
@@ -2021,6 +2103,10 @@ SlashCmdList.FQT = function(msg)
     local cmd, arg = msg:match("^(%S+)%s*(.*)$")
     if cmd == "preview" or cmd == "glow" then
         ns.SetPreview(arg)
+        return
+    end
+    if cmd == "questie" then
+        Ell.QuestieReport(tonumber(arg))
         return
     end
     if msg == "status" then

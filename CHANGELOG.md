@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.4
+- Works with EllesmereUI's own quest tracker (the new tracker it draws in place of Blizzard's, in its own style): non-vanilla quest titles get the name marker, and the optional logo beside the title.
+- Fixed the teal on the quest log (with EllesmereUI's skin) ending short of the Rewards panel: it now runs underneath it, like the unskinned log.
+- New `/fqt questie [questID]` to report how Questie's icons of non-vanilla quests look to the addon (icon type, colour, whether the teal gradient is drawn), for reporting icons that don't tint. `/fqt status` now shows whether EllesmereUI's tracker rows are hooked.
+
 ## 0.7.3
 - Fixed the quest name marker missing in the objective tracker for elite, dungeon, PvP and raid quests on Forever, whose tracker adds the tag after the name ("Quest Name (Elite)").
 
