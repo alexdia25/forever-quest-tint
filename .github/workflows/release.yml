@@ -1,0 +1,57 @@
+# Builds ForeverQuestTint-<version>.zip and attaches it to the GitHub release when a version tag is pushed
+# (git tag v0.7.5 && git push origin v0.7.5). The release is created from that version's CHANGELOG.md section if
+# it doesn't exist yet. The zip holds a single ForeverQuestTint/ folder, so addon managers such as WowUp can
+# install it straight from the repo URL. The dev TOCs, screenshots and logo sources are left out, as in .pkgmeta.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the TOC version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          toc="$(grep -m1 '^## Version:' ForeverQuestTint.toc | sed 's/^## Version:[[:space:]]*//' | tr -d '\r')"
+          if [ "$tag" != "$toc" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match ForeverQuestTint.toc version $toc" >&2
+            exit 1
+          fi
+
+      - name: Build the zip
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p pkg/ForeverQuestTint
+          cp CHANGELOG.md LICENSE README.md ForeverQuestTint.toc ./*.lua pkg/ForeverQuestTint/
+          cp -r Media pkg/ForeverQuestTint/Media
+          (cd pkg && zip -r "../ForeverQuestTint-${version}.zip" ForeverQuestTint)
+
+      - name: Write the release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            $0 ~ "^## " v "$" { on = 1; next }
+            on && /^## / { exit }
+            on { print }
+          ' CHANGELOG.md | sed -e 's/\r$//' -e '/./,$!d' > notes.md
+          if [ ! -s notes.md ]; then echo "Forever Quest Tint $version" > notes.md; fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          zip="ForeverQuestTint-${version}.zip"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$zip" --title "Forever Quest Tint $version" --notes-file notes.md
+          fi
