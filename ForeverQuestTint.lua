@@ -1973,6 +1973,54 @@ function Ell.QuestieReport(questID)
         n, questID and (" for quest " .. questID) or "", #questieFrames))
 end
 
+-- Pretty Wide Quest Log (addon): on Forever it replaces the quest log with a window of its own (PrettyWideQuestLogFrame),
+-- drawing the parchment as window art and the quest details on a pane frame over it (the child that has a ContrastBG).
+-- That art isn't an atlas to copy, so the shown quest's details get the flat teal wash over the whole pane. PWQL keeps
+-- the game's selected quest in step with the pane, so the quest is read from there; its own state isn't reachable.
+-- The quest giver window is still the game's, so the existing tint applies to it as usual.
+local PW = { KEY = "pwql", SCALE = 1, ALPHA = 0.85, elapsed = 0 }
+ns.PW = PW
+
+function PW.Refresh()
+    local window = _G.PrettyWideQuestLogFrame
+    if not (window and ns.cfg) then return end
+    local pane = PW.pane
+    if not pane then
+        for _, child in ipairs({ window:GetChildren() }) do
+            if child.ContrastBG then
+                pane = child
+                PW.pane = child
+                break
+            end
+        end
+        if not pane then return end
+    end
+    local id = C_QuestLog and C_QuestLog.GetSelectedQuest and C_QuestLog.GetSelectedQuest()
+    if window:IsVisible() and pane:IsVisible() and ns.cfg.showTint and IsMarked(id) then
+        ApplyFlat(PW.KEY, pane, pane, PW.SCALE, PW.ALPHA, nil, "BACKGROUND", false)
+    else
+        HideFlat(PW.KEY)
+    end
+end
+
+function PW.Hook()
+    local window = _G.PrettyWideQuestLogFrame
+    if PW.hooked or not (window and window.HookScript) then return end
+    PW.hooked = true
+    -- The selection changes without a script of ours to hook, so look while the window is open (a child's OnUpdate
+    -- only runs while its window is shown).
+    local keeper = CreateFrame("Frame", nil, window)
+    keeper:SetScript("OnUpdate", function(_, dt)
+        PW.elapsed = PW.elapsed + dt
+        if PW.elapsed < 0.1 then return end
+        PW.elapsed = 0
+        PW.Refresh()
+    end)
+    window:HookScript("OnShow", PW.Refresh)
+    window:HookScript("OnHide", function() HideFlat(PW.KEY) end)
+    PW.Refresh()
+end
+
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:RegisterEvent("ADDON_LOADED")
@@ -2008,6 +2056,7 @@ loader:SetScript("OnEvent", function(_, event, name)
     HookStoryline()
     MapPins.Hook()
     Ell.Hook()
+    PW.Hook()
 end)
 HookLog()
 HookMarkers()
@@ -2019,6 +2068,7 @@ HookQuestie()
 HookStoryline()
 MapPins.Hook()
 Ell.Hook()
+PW.Hook()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
@@ -2044,6 +2094,8 @@ function ns.Reapply()
     RefreshLogList()
     RefreshTracker()
     Ell.Refresh()
+    PW.Hook()
+    PW.Refresh()
     QueueScan()
 end
 
@@ -2094,7 +2146,8 @@ local function Status()
     print(("  Questie: %s (map icons %s, %d hooked)  Storyline: %s (hooked %s)"):format(loaded("Questie"),
         questieHooked and "hooked" or "not hooked", #questieFrames, loaded("Storyline"), tostring(slHooked)))
     print(("  Questie tracker: %s"):format(#questieLines > 0 and (#questieLines .. " lines hooked") or "not hooked"))
-    print(("  EllesmereUI own tracker rows: %s"):format(Ell.registered and "hooked" or "not hooked"))
+    print(("  EllesmereUI own tracker rows: %s  Pretty Wide Quest Log: %s"):format(Ell.registered and "hooked" or "not hooked",
+        PW.hooked and "hooked" or "not hooked"))
 end
 
 SLASH_FQT1 = "/fqt"

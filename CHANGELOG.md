@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.5
+- Works with Pretty Wide Quest Log: on Forever, the quest details in its quest log window get a teal wash over the parchment for non-vanilla quests. The addon now loads after it. `/fqt status` shows whether it was found.
+
 ## 0.7.4
 - Works with EllesmereUI's own quest tracker (the new tracker it draws in place of Blizzard's, in its own style): non-vanilla quest titles get the name marker, and the optional logo beside the title.
 - Fixed the teal on the quest log (with EllesmereUI's skin) ending short of the Rewards panel: it now runs underneath it, like the unskinned log.
