@@ -1310,7 +1310,7 @@ local function UpdateTrackerLogo(block, wanted)
     badge:Show()
 end
 
-local function ApplyMarker(fs, wanted, padBlock, keep)
+local function ApplyMarker(fs, wanted, padBlock, keep, glue)
     local cur = fs:GetText()
     if not cur then return end
     local base = cur
@@ -1319,14 +1319,29 @@ local function ApplyMarker(fs, wanted, padBlock, keep)
     end
     local new = base
     local useMarker = wanted and ns.cfg.marker and (ns.cfg.markerIcon or ns.cfg.markerSymbol ~= "")
+    -- glue (the journal's rows): nothing to redo while the text, the marker and the width are as last measured.
+    local glueKey = glue and (tostring(useMarker and MarkerGlyph() or false) .. "|" .. (fs:GetWidth() or 0))
+    if glueKey and fs.fqtMarked and cur == fs.fqtMarked and fs.fqtGlueKey == glueKey then return end
     if useMarker then
         if ns.cfg.markerAtStart then
             new = MarkerGlyph() .. " " .. base
         else
-            new = base .. " " .. MarkerGlyph()
+            new = base .. (glue and "\194\160" or " ") .. MarkerGlyph()
         end
     end
     fs.fqtBase = base
+    fs.fqtGlueKey = glueKey
+    if glue and useMarker and not ns.cfg.markerAtStart and fs.GetStringHeight and new ~= cur then
+        -- A name that fits on its lines but whose marker would wrap alone onto a new line: move the name's last
+        -- word down with the marker instead, so the marker stays beside text.
+        fs:SetText(base)
+        local baseHeight = fs:GetStringHeight()
+        fs:SetText(new)
+        if fs:GetStringHeight() > baseHeight + 0.5 then
+            local prefix, last = base:match("^(.-)%s+(%S+)$")
+            if prefix then new = prefix .. "\n" .. last .. "\194\160" .. MarkerGlyph() end
+        end
+    end
     if new ~= cur then
         fs.fqtPad = 0
         if padBlock and useMarker and fs.GetStringHeight then
@@ -2021,6 +2036,196 @@ function PW.Hook()
     PW.Refresh()
 end
 
+-- DungeonJournal (addon, ForeverDungeonJournal): its Quests tab has a list of quest rows (each with .questID and a
+-- .name text) and a details pane (frame.questTextInset) drawn over a parchment texture (frame.questParchment). Marked
+-- quests get the marker after their name in both, and the flat teal wash over the details pane. The addon rewrites
+-- the row texts whenever it rebuilds the list and never says which quest is selected, so while the window is open
+-- the selection is read from its saved state (lastDungeon / lastQuest, an index into FDJ.DB[dungeon].quests).
+local DJ = { KEY = "fdj", SCALE = 0.7, ALPHA = 0.85, elapsed = 0, tries = 0 }
+ns.DJ = DJ
+
+-- The journal rebuilds its list on every click: each row's text, then its height, then the list's height. A fix a
+-- frame later is drawn one frame late (a flicker), so the marker and the extra line are put back by hooks that run
+-- the moment each of those is written, before anything is drawn. The periodic check below is only a safety net.
+local function DJFdj()
+    local fdj = _G.ForeverDungeonJournal_NS
+    return fdj and fdj.DB and fdj
+end
+
+function DJ.SelectedQuestID()
+    local fdj, db = DJFdj(), _G.ForeverDungeonJournalDB
+    if not (fdj and db) then return nil end
+    local dungeon = fdj.GetSelectedDungeon and fdj.GetSelectedDungeon() or db.lastDungeon
+    local quests = dungeon and fdj.DB[dungeon] and fdj.DB[dungeon].quests
+    local quest = quests and quests[db.lastQuest or 1]
+    return quest and quest.id
+end
+
+-- A row's quest. Its index is set before its text; its questID only after, so the index is read first.
+local function DJRowID(row)
+    local fdj = DJFdj()
+    local dungeon = fdj and fdj.GetSelectedDungeon and fdj.GetSelectedDungeon()
+    local quests = dungeon and fdj.DB[dungeon] and fdj.DB[dungeon].quests
+    local quest = quests and row.questIndex and quests[row.questIndex]
+    return quest and quest.id or row.questID
+end
+
+-- The marker on a row's name; returns how much taller the name got from it (a marker that wraps onto another line
+-- makes it taller than the row the journal sized for it).
+function DJ.MarkRow(row)
+    local name = row.name
+    DJ.busy = true
+    ApplyMarker(name, IsMarked(DJRowID(row)), nil, nil, true)
+    local pad = 0
+    if name.fqtBase and name.fqtMarked ~= name.fqtBase and name:GetText() == name.fqtMarked then
+        local key = name.fqtMarked .. "|" .. (name:GetWidth() or 0)
+        if name.fqtDJKey ~= key then
+            name:SetText(name.fqtBase)
+            local h0 = name:GetStringHeight()
+            name:SetText(name.fqtMarked)
+            name.fqtDJPad = math.max(0, name:GetStringHeight() - h0)
+            name.fqtDJKey = key
+        end
+        pad = name.fqtDJPad or 0
+    end
+    row.fqtDJPad = pad
+    DJ.busy = nil
+    return pad
+end
+
+-- The row made taller by that line. The journal resets the height on every rebuild, so it is added again whenever
+-- the height isn't the padded one.
+function DJ.HeightRow(row)
+    local pad, h = row.fqtDJPad or 0, row:GetHeight()
+    -- A height the journal set while the marker was already on the name was measured with it: nothing to add.
+    if row.fqtDJSizedH and math.abs(h - row.fqtDJSizedH) <= 0.5 then pad = 0 end
+    DJ.busy = true
+    if pad > 0 then
+        if not row.fqtDJPaddedH or math.abs(h - row.fqtDJPaddedH) > 0.5 then
+            row:SetHeight(h + pad)
+            row.fqtDJPaddedH = h + pad
+        end
+    elseif row.fqtDJPaddedH then
+        if math.abs(h - row.fqtDJPaddedH) <= 0.5 then row:SetHeight(h - (row.fqtDJLastPad or 0)) end
+        row.fqtDJPaddedH = nil
+    end
+    row.fqtDJLastPad = pad
+    DJ.busy = nil
+end
+
+-- The scrolled list is as tall as the rows the journal counted, so the lines are added there too.
+function DJ.FixContent(content)
+    local total = 0
+    for _, row in ipairs({ content:GetChildren() }) do
+        if row.questIndex and row.name and row:IsShown() then total = total + (row.fqtDJLastPad or 0) end
+    end
+    local ch = content:GetHeight()
+    DJ.busy = true
+    if total > 0 then
+        if not content.fqtDJPaddedH or math.abs(ch - content.fqtDJPaddedH) > 0.5 then
+            content:SetHeight(ch + total)
+            content.fqtDJPaddedH = ch + total
+        elseif math.abs((content.fqtDJLastTotal or 0) - total) > 0.5 then
+            content:SetHeight(ch - (content.fqtDJLastTotal or 0) + total)
+            content.fqtDJPaddedH = content:GetHeight()
+        end
+    elseif content.fqtDJPaddedH then
+        if math.abs(ch - content.fqtDJPaddedH) <= 0.5 then content:SetHeight(ch - (content.fqtDJLastTotal or 0)) end
+        content.fqtDJPaddedH = nil
+    end
+    content.fqtDJLastTotal = total
+    DJ.busy = nil
+end
+
+local function DJHookRow(row)
+    if row.fqtDJHooked then return end
+    row.fqtDJHooked = true
+    hooksecurefunc(row.name, "SetText", function()
+        if not DJ.busy then DJ.MarkRow(row) end
+    end)
+    hooksecurefunc(row, "SetHeight", function()
+        if DJ.busy then return end
+        row.fqtDJSizedH = row:GetHeight()
+        DJ.MarkRow(row)
+        DJ.HeightRow(row)
+    end)
+end
+
+local function DJHookWindow(window)
+    if window.fqtDJHooked then return end
+    window.fqtDJHooked = true
+    local content, name = window.questContent, window.selectedQuestName
+    if content then
+        hooksecurefunc(content, "SetHeight", function()
+            if not DJ.busy then DJ.FixContent(content) end
+        end)
+    end
+    if name then
+        hooksecurefunc(name, "SetText", function()
+            if DJ.busy then return end
+            DJ.busy = true
+            ApplyMarker(name, IsMarked(DJ.SelectedQuestID()), nil, nil, true)
+            DJ.busy = nil
+        end)
+    end
+end
+
+function DJ.Refresh()
+    local window = _G.ForeverDungeonJournalFrame
+    if not (window and ns.cfg) then return end
+    DJHookWindow(window)
+    local pane = window.questTextInset
+    local shown = window:IsVisible() and pane and pane:IsVisible()
+    local content = window.questContent
+    if shown and content then
+        for _, row in ipairs({ content:GetChildren() }) do
+            if row.questIndex and row.name and row.name.GetText then
+                DJHookRow(row)
+                DJ.MarkRow(row)
+                DJ.HeightRow(row)
+            end
+        end
+        DJ.FixContent(content)
+    end
+    -- The details pane.
+    local id = shown and DJ.SelectedQuestID()
+    local name = window.selectedQuestName
+    if name and shown then
+        DJ.busy = true
+        ApplyMarker(name, IsMarked(id), nil, nil, true)
+        DJ.busy = nil
+    end
+    if shown and window.questParchment and ns.cfg.showTint and IsMarked(id) then
+        ApplyFlat(DJ.KEY, pane, window.questParchment, DJ.SCALE, DJ.ALPHA, nil, "BACKGROUND", false)
+    else
+        HideFlat(DJ.KEY)
+    end
+end
+
+function DJ.Hook()
+    local window = _G.ForeverDungeonJournalFrame
+    if DJ.hooked then return end
+    if not (window and window.HookScript) then
+        -- The journal builds its window a little after login; look again shortly.
+        if DJ.tries < 30 and C_Timer then
+            DJ.tries = DJ.tries + 1
+            C_Timer.After(1, DJ.Hook)
+        end
+        return
+    end
+    DJ.hooked = true
+    local keeper = CreateFrame("Frame", nil, window)
+    keeper:SetScript("OnUpdate", function(_, dt)
+        DJ.elapsed = DJ.elapsed + dt
+        if DJ.elapsed < 0.1 then return end
+        DJ.elapsed = 0
+        DJ.Refresh()
+    end)
+    window:HookScript("OnShow", DJ.Refresh)
+    window:HookScript("OnHide", function() HideFlat(DJ.KEY) end)
+    DJ.Refresh()
+end
+
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:RegisterEvent("ADDON_LOADED")
@@ -2057,6 +2262,7 @@ loader:SetScript("OnEvent", function(_, event, name)
     MapPins.Hook()
     Ell.Hook()
     PW.Hook()
+    DJ.Hook()
 end)
 HookLog()
 HookMarkers()
@@ -2069,6 +2275,7 @@ HookStoryline()
 MapPins.Hook()
 Ell.Hook()
 PW.Hook()
+DJ.Hook()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
@@ -2096,6 +2303,8 @@ function ns.Reapply()
     Ell.Refresh()
     PW.Hook()
     PW.Refresh()
+    DJ.Hook()
+    DJ.Refresh()
     QueueScan()
 end
 
@@ -2148,6 +2357,7 @@ local function Status()
     print(("  Questie tracker: %s"):format(#questieLines > 0 and (#questieLines .. " lines hooked") or "not hooked"))
     print(("  EllesmereUI own tracker rows: %s  Pretty Wide Quest Log: %s"):format(Ell.registered and "hooked" or "not hooked",
         PW.hooked and "hooked" or "not hooked"))
+    print(("  DungeonJournal: %s (hooked %s)"):format(loaded("ForeverDungeonJournal"), tostring(DJ.hooked == true)))
 end
 
 SLASH_FQT1 = "/fqt"

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.6
+- Works with DungeonJournal (ForeverDungeonJournal): non-vanilla quests get the marker after their name in its quest list and in the quest details, and a teal wash over the details pane. A long name that wraps keeps the marker beside its last word, and the row grows to fit. The marker is put back the moment the journal redraws its list, so it doesn't flicker when you click a quest. The addon now loads after the journal. `/fqt status` shows whether it was hooked.
+
 ## 0.7.5
 - Works with Pretty Wide Quest Log: on Forever, the quest details in its quest log window get a teal wash over the parchment for non-vanilla quests. The addon now loads after it. `/fqt status` shows whether it was found.
 
