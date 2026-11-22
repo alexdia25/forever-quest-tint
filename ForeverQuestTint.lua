@@ -297,8 +297,6 @@ local function ApplyOverlay(tex, tinted, noLogo)
     local info = atlas and C_Texture.GetAtlasInfo(atlas)
     if info then
         l, r, t, b = info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord
-        -- A pane that crops the art at its bottom (Classic Quest Log) shows only the top part of the atlas; the
-        -- copy has to show the same part.
         local _, _, _, _, _, _, _, lry = tex:GetTexCoord()
         if lry and lry > t and lry < b - 0.0005 then b = lry end
     else
@@ -2230,13 +2228,6 @@ function DJ.Hook()
     DJ.Refresh()
 end
 
--- Classic Quest Log (addon, ClassicQuestLog): a quest log window of its own, with a list on the left and the quest's
--- details on the right, drawn like the world map's quest details (parchment, header strip, Rewards panel over the
--- bottom). It offers ClassicQuestLogAPI for addons like this one, so nothing here reaches into its internals: the
--- details pane's parchment gets the tint like the map's, the logo goes on the left of the pane's header strip
--- (Spoken's buttons are on the right), and each marked quest's row in the list gets the marker.
--- It tells us when the pane is filled or emptied (DetailShown), when the Rewards panel moves while the text scrolls
--- (DetailLayout) and when a list row is filled (RowInit; its title is plain text again by then).
 local CQL = { KEY = "cql", LOGO_SIZE = 24, LOGO_X = 12, LOGO_Y = 4 }
 ns.CQL = CQL
 
@@ -2245,8 +2236,6 @@ local function CQLApi()
     return api and api.version == 1 and api or nil
 end
 
--- The tint on the parchment; the cheap part, redone as the Rewards panel moves. Both read the quest from the window
--- (nil while it is closed or empty), not from the event.
 function CQL:RefreshTint()
     local api = CQLApi()
     local bg = api and api.GetDetailParchment()
