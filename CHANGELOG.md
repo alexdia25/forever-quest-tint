@@ -1,9 +1,5 @@
 # Changelog
 
-## Unreleased
-- Works with Classic Quest Log: non-vanilla quests get the teal wash over the parchment of its quest details pane, the optional logo on the pane's header strip, and the marker after their name in its quest list. It is hooked through the addon's public `ClassicQuestLogAPI` and its `ClassicQuestLog.*` events, so it updates as the Rewards panel moves and as the list redraws. The addon now loads after it. `/fqt status` shows whether it was hooked.
-- The teal copy of the parchment now follows a pane that crops the art at its bottom, instead of assuming the whole atlas is shown.
-
 ## 0.7.6
 - Works with DungeonJournal (ForeverDungeonJournal): non-vanilla quests get the marker after their name in its quest list and in the quest details, and a teal wash over the details pane. A long name that wraps keeps the marker beside its last word, and the row grows to fit. The marker is put back the moment the journal redraws its list, so it doesn't flicker when you click a quest. The addon now loads after the journal. `/fqt status` shows whether it was hooked.
 
