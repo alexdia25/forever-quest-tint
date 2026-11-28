@@ -297,6 +297,8 @@ local function ApplyOverlay(tex, tinted, noLogo)
     local info = atlas and C_Texture.GetAtlasInfo(atlas)
     if info then
         l, r, t, b = info.leftTexCoord, info.rightTexCoord, info.topTexCoord, info.bottomTexCoord
+        local _, _, _, _, _, _, _, lry = tex:GetTexCoord()
+        if lry and lry > t and lry < b - 0.0005 then b = lry end
     else
         local ulx, uly, _, _, _, _, lrx, lry = tex:GetTexCoord()
         l, r, t, b = ulx, lrx, uly, lry
@@ -2226,6 +2228,54 @@ function DJ.Hook()
     DJ.Refresh()
 end
 
+local CQL = { KEY = "cql", LOGO_SIZE = 24, LOGO_X = 12, LOGO_Y = 4 }
+ns.CQL = CQL
+
+local function CQLApi()
+    local api = _G.ClassicQuestLogAPI
+    return api and api.version == 1 and api or nil
+end
+
+function CQL:RefreshTint()
+    local api = CQLApi()
+    local bg = api and api.GetDetailParchment()
+    if not bg then return end
+    ApplyOverlay(bg, IsMarked(api.GetDisplayedQuestID()), true)
+end
+
+function CQL:RefreshDetail()
+    local api = CQLApi()
+    if not api then return end
+    CQL:RefreshTint()
+    local show = ns.cfg.showLogo and IsMarked(api.GetDisplayedQuestID())
+    ApplyBadge(CQL.KEY, api.GetDetailHeader(), show, "LEFT", "LEFT", CQL.LOGO_X, CQL.LOGO_Y, CQL.LOGO_SIZE)
+end
+
+local function CQLMarkRow(_, questID, title)
+    ApplyMarker(title, IsMarked(questID))
+end
+
+function CQL:RefreshRows()
+    local api = CQLApi()
+    if api then api.ForEachQuestRow(CQLMarkRow) end
+end
+
+function CQL:Refresh()
+    CQL:RefreshDetail()
+    CQL:RefreshRows()
+end
+
+function CQL.Hook()
+    local api = CQLApi()
+    if CQL.hooked or not (api and EventRegistry) then return end
+    CQL.hooked = true
+    local events = api.Events
+    EventRegistry:RegisterCallback(events.DetailShown, CQL.RefreshDetail, CQL)
+    EventRegistry:RegisterCallback(events.DetailLayout, CQL.RefreshTint, CQL)
+    EventRegistry:RegisterCallback(events.RowInit, function(_, row, questID, title) CQLMarkRow(row, questID, title) end, CQL)
+    CQL:Refresh()
+end
+
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:RegisterEvent("ADDON_LOADED")
@@ -2263,6 +2313,7 @@ loader:SetScript("OnEvent", function(_, event, name)
     Ell.Hook()
     PW.Hook()
     DJ.Hook()
+    CQL.Hook()
 end)
 HookLog()
 HookMarkers()
@@ -2276,6 +2327,7 @@ MapPins.Hook()
 Ell.Hook()
 PW.Hook()
 DJ.Hook()
+CQL.Hook()
 
 -- Called by the options panel after any setting changes.
 function ns.Reapply()
@@ -2305,6 +2357,8 @@ function ns.Reapply()
     PW.Refresh()
     DJ.Hook()
     DJ.Refresh()
+    CQL.Hook()
+    CQL:Refresh()
     QueueScan()
 end
 
@@ -2357,7 +2411,8 @@ local function Status()
     print(("  Questie tracker: %s"):format(#questieLines > 0 and (#questieLines .. " lines hooked") or "not hooked"))
     print(("  EllesmereUI own tracker rows: %s  Pretty Wide Quest Log: %s"):format(Ell.registered and "hooked" or "not hooked",
         PW.hooked and "hooked" or "not hooked"))
-    print(("  DungeonJournal: %s (hooked %s)"):format(loaded("ForeverDungeonJournal"), tostring(DJ.hooked == true)))
+    print(("  DungeonJournal: %s (hooked %s)  Classic Quest Log: %s (hooked %s)"):format(loaded("ForeverDungeonJournal"),
+        tostring(DJ.hooked == true), loaded("ClassicQuestLog"), tostring(CQL.hooked == true)))
 end
 
 SLASH_FQT1 = "/fqt"

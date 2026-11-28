@@ -9,7 +9,7 @@
 ## Version: 0.7.6
 ## IconTexture: Interface\AddOns\ForeverQuestTint\Media\ForeverLogo
 ## SavedVariables: ForeverQuestTintDB
-## OptionalDeps: DialogueUI, Immersion, Storyline, Lorewalker, Questie, ClassicUIForever, EllesmereUI, EllesmereUIQuestTracker, Pretty-Wide-Quest-Log, ForeverDungeonJournal
+## OptionalDeps: DialogueUI, Immersion, Storyline, Lorewalker, Questie, ClassicUIForever, EllesmereUI, EllesmereUIQuestTracker, Pretty-Wide-Quest-Log, ForeverDungeonJournal, ClassicQuestLog
 
 VanillaQuests.lua
 ForeverQuestTint.lua
