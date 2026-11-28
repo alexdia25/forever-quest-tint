@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.7
+- Works with Classic Quest Log (v1.0.0 or later): in its quest details pane, non-vanilla quests get the tint over the parchment, the logo on the left of the header strip, and the quest name marker on their rows in its list. It tells this addon what it shows through its public `ClassicQuestLogAPI`, so there is nothing to configure. `/fqt status` shows whether it was hooked. Thanks to yak for the contribution.
+
 ## 0.7.6
 - Works with DungeonJournal (ForeverDungeonJournal): non-vanilla quests get the marker after their name in its quest list and in the quest details, and a teal wash over the details pane. A long name that wraps keeps the marker beside its last word, and the row grows to fit. The marker is put back the moment the journal redraws its list, so it doesn't flicker when you click a quest. The addon now loads after the journal. `/fqt status` shows whether it was hooked.
 
